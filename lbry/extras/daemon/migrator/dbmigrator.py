@@ -48,10 +48,12 @@ def migrate_db(conf, start, end):
             if os.path.exists(os.path.join(conf.data_dir, "lbrynet.sqlite")):
                 backup_name = f"rev_{current}_unmigrated_database"
                 count = 0
-                while os.path.exists(os.path.join(conf.data_dir, backup_name + ".sqlite")):
+                while os.path.exists(
+                    os.path.join(conf.data_dir, f"{backup_name}.sqlite")
+                ):
                     count += 1
                     backup_name = f"rev_{current}_unmigrated_database_{count}"
-                backup_path = os.path.join(conf.data_dir, backup_name + ".sqlite")
+                backup_path = os.path.join(conf.data_dir, f"{backup_name}.sqlite")
                 os.rename(os.path.join(conf.data_dir, "lbrynet.sqlite"), backup_path)
                 log.info("made a backup of the unmigrated database: %s", backup_path)
             if os.path.isfile(os.path.join(conf.data_dir, "db_revision")):

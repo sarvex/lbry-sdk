@@ -155,8 +155,7 @@ class AbstractBlob:
             if writer and writer.finished and not writer.finished.done() and not self.loop.is_closed():
                 writer.finished.cancel()
         while self.readers:
-            reader = self.readers.pop()
-            if reader:
+            if reader := self.readers.pop():
                 reader.close()
 
     def delete(self):
@@ -174,7 +173,7 @@ class AbstractBlob:
         with self.reader_context() as handle:
             try:
                 return await self.loop.sendfile(writer.transport, handle, count=self.get_length())
-            except (ConnectionError, BrokenPipeError, RuntimeError, OSError, AttributeError):
+            except (ConnectionError, RuntimeError, OSError, AttributeError):
                 return -1
 
     def decrypt(self, key: bytes, iv: bytes) -> bytes:

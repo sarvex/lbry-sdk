@@ -177,7 +177,7 @@ class ClaimSearchCommand(ClaimTestCase):
         await self.assertFindsClaims(claims, channel=f"@abc#{self.channel_id}", valid_channel_signature=True)
         await self.assertFindsClaims(claims, channel=f"@abc#{self.channel_id}", has_channel_signature=True, valid_channel_signature=True)
         await self.assertFindsClaims([], channel=f"@abc#{self.channel_id}", has_channel_signature=True, invalid_channel_signature=True)  # fixme
-        await self.assertFindsClaims([], channel=f"@inexistent")
+        await self.assertFindsClaims([], channel="@inexistent")
         await self.assertFindsClaims([three, two, signed2, signed], channel_ids=[channel_id2, self.channel_id])
         await self.channel_abandon(claim_id=self.channel_id)
         await self.assertFindsClaims([], channel=f"@abc#{self.channel_id}", valid_channel_signature=True)
@@ -190,12 +190,14 @@ class ClaimSearchCommand(ClaimTestCase):
         self.ledger._tx_cache.clear()
         invalid_claims = await self.claim_search(invalid_channel_signature=True, has_channel_signature=True)
         self.assertEqual(3, len(invalid_claims))
-        self.assertTrue(all([not c['is_channel_signature_valid'] for c in invalid_claims]))
+        self.assertTrue(
+            all(not c['is_channel_signature_valid'] for c in invalid_claims)
+        )
         self.assertEqual({'channel_id': self.channel_id}, invalid_claims[0]['signing_channel'])
 
         valid_claims = await self.claim_search(valid_channel_signature=True, has_channel_signature=True)
         self.assertEqual(1, len(valid_claims))
-        self.assertTrue(all([c['is_channel_signature_valid'] for c in valid_claims]))
+        self.assertTrue(all(c['is_channel_signature_valid'] for c in valid_claims))
         self.assertEqual('@abc', valid_claims[0]['signing_channel']['name'])
 
         # abandoned stream won't show up for streams in channel search
@@ -2311,8 +2313,7 @@ class CollectionCommands(CommandTestCase):
                 await self.stream_create('stream-two')
             ]
         ]
-        claim_ids.append(claim_ids[0])
-        claim_ids.append('beef')
+        claim_ids.extend((claim_ids[0], 'beef'))
         tx = await self.collection_create('radjingles', claims=claim_ids, title="boring title")
         claim_id = self.get_claim_id(tx)
         collections = await self.out(self.daemon.jsonrpc_collection_list())

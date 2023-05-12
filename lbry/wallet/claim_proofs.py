@@ -27,9 +27,11 @@ def verify_proof(proof, root_hash, name):
         for child in node['children']:
             if child['character'] < 0 or child['character'] > 255:
                 raise InvalidProofError("child character not int between 0 and 255")
-            if previous_child_character:
-                if previous_child_character >= child['character']:
-                    raise InvalidProofError("children not in increasing order")
+            if (
+                previous_child_character
+                and previous_child_character >= child['character']
+            ):
+                raise InvalidProofError("children not in increasing order")
             previous_child_character = child['character']
             to_hash += bytes((child['character'],))
             if 'nodeHash' in child:
@@ -45,9 +47,8 @@ def verify_proof(proof, root_hash, name):
                 reverse_computed_name += chr(child['character'])
                 to_hash += previous_computed_hash
 
-        if not found_child_in_chain:
-            if i != 0:
-                raise InvalidProofError("did not find the alleged child")
+        if not found_child_in_chain and i != 0:
+            raise InvalidProofError("did not find the alleged child")
         if i == 0 and 'txhash' in proof and 'nOut' in proof and 'last takeover height' in proof:
             if len(proof['txhash']) != 64:
                 raise InvalidProofError(f"txhash was invalid: {proof['txhash']}")
@@ -71,13 +72,11 @@ def verify_proof(proof, root_hash, name):
 
     if previous_computed_hash != binascii.unhexlify(root_hash)[::-1]:
         raise InvalidProofError("computed hash does not match roothash")
-    if 'txhash' in proof and 'nOut' in proof:
-        if not verified_value:
-            raise InvalidProofError("mismatch between proof claim and outcome")
+    if 'txhash' in proof and 'nOut' in proof and not verified_value:
+        raise InvalidProofError("mismatch between proof claim and outcome")
     target = reverse_computed_name[::-1].encode('ISO-8859-1').decode()
-    if 'txhash' in proof and 'nOut' in proof:
-        if name != target:
-            raise InvalidProofError("name did not match proof")
+    if 'txhash' in proof and 'nOut' in proof and name != target:
+        raise InvalidProofError("name did not match proof")
     if not name.startswith(target):
         raise InvalidProofError("name fragment does not match proof")
     return True

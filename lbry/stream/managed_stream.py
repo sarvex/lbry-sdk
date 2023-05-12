@@ -115,8 +115,10 @@ class ManagedStream(ManagedDownloadSource):
 
     @property
     def blobs_completed(self) -> int:
-        return sum([1 if b.blob_hash in self.blob_manager.completed_blob_hashes else 0
-                    for b in self.descriptor.blobs[:-1]])
+        return sum(
+            1 if b.blob_hash in self.blob_manager.completed_blob_hashes else 0
+            for b in self.descriptor.blobs[:-1]
+        )
 
     @property
     def blobs_in_stream(self) -> int:
@@ -348,11 +350,10 @@ class ManagedStream(ManagedDownloadSource):
             sent_sd, needed = await protocol.send_descriptor()
             if sent_sd:  # reflector needed the sd blob
                 sent.append(self.sd_hash)
-            if not sent_sd and not needed:  # reflector already has the stream
-                if not self.fully_reflected.is_set():
-                    self.fully_reflected.set()
-                    await self.blob_manager.storage.update_reflected_stream(self.sd_hash, f"{host}:{port}")
-                    return []
+            if not sent_sd and not needed and not self.fully_reflected.is_set():
+                self.fully_reflected.set()
+                await self.blob_manager.storage.update_reflected_stream(self.sd_hash, f"{host}:{port}")
+                return []
             we_have = [
                 blob_hash for blob_hash in needed if blob_hash in self.blob_manager.completed_blob_hashes
             ]
@@ -366,7 +367,7 @@ class ManagedStream(ManagedDownloadSource):
             return sent
         except ConnectionError:
             return sent
-        except (OSError, Exception) as err:
+        except Exception as err:
             if isinstance(err, asyncio.CancelledError):
                 log.warning("stopped uploading %s#%s to reflector", self.claim_name, self.claim_id)
             elif isinstance(err, OSError):
@@ -407,18 +408,16 @@ class ManagedStream(ManagedDownloadSource):
         if '=' in get_range:
             get_range = get_range.split('=')[1]
         start, end = get_range.split('-')
-        size = 0
-
-        for blob in self.descriptor.blobs[:-1]:
-            size += blob.length - 1
-        if self.stream_claim_info and self.stream_claim_info.claim.stream.source.size:
-            size_from_claim = int(self.stream_claim_info.claim.stream.source.size)
-            if not size_from_claim <= size <= size_from_claim + 16:
-                raise ValueError("claim contains implausible stream size")
-            log.debug("using stream size from claim")
-            size = size_from_claim
-        elif self.stream_claim_info:
-            log.debug("estimating stream size")
+        size = sum(blob.length - 1 for blob in self.descriptor.blobs[:-1])
+        if self.stream_claim_info:
+            if self.stream_claim_info.claim.stream.source.size:
+                size_from_claim = int(self.stream_claim_info.claim.stream.source.size)
+                if not size_from_claim <= size <= size_from_claim + 16:
+                    raise ValueError("claim contains implausible stream size")
+                log.debug("using stream size from claim")
+                size = size_from_claim
+            else:
+                log.debug("estimating stream size")
 
         start = int(start)
         if not 0 <= start < size:

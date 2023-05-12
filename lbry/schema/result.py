@@ -166,11 +166,11 @@ class Outputs:
     def from_bytes(cls, data: bytes) -> 'Outputs':
         outputs = OutputsMessage()
         outputs.ParseFromString(data)
-        txs = set()
-        for txo_message in chain(outputs.txos, outputs.extra_txos):
-            if txo_message.WhichOneof('meta') == 'error':
-                continue
-            txs.add((hexlify(txo_message.tx_hash[::-1]).decode(), txo_message.height))
+        txs = {
+            (hexlify(txo_message.tx_hash[::-1]).decode(), txo_message.height)
+            for txo_message in chain(outputs.txos, outputs.extra_txos)
+            if txo_message.WhichOneof('meta') != 'error'
+        }
         return cls(
             outputs.txos, outputs.extra_txos, txs,
             outputs.offset, outputs.total,

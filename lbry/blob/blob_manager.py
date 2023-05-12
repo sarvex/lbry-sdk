@@ -104,16 +104,15 @@ class BlobManager:
             raise Exception("Blob hash is None")
         if not blob.length:
             raise Exception("Blob has a length of 0")
-        if isinstance(blob, BlobFile):
-            if blob.blob_hash not in self.completed_blob_hashes:
-                self.completed_blob_hashes.add(blob.blob_hash)
-            return self.loop.create_task(self.storage.add_blobs(
-                (blob.blob_hash, blob.length, blob.added_on, blob.is_mine), finished=True)
-            )
-        else:
+        if not isinstance(blob, BlobFile):
             return self.loop.create_task(self.storage.add_blobs(
                 (blob.blob_hash, blob.length, blob.added_on, blob.is_mine), finished=False)
             )
+        if blob.blob_hash not in self.completed_blob_hashes:
+            self.completed_blob_hashes.add(blob.blob_hash)
+        return self.loop.create_task(self.storage.add_blobs(
+            (blob.blob_hash, blob.length, blob.added_on, blob.is_mine), finished=True)
+        )
 
     async def ensure_completed_blobs_status(self, blob_hashes: typing.Iterable[str]):
         """Ensures that completed blobs from a given list of blob hashes are set as 'finished' in the database."""
@@ -132,13 +131,13 @@ class BlobManager:
         if not is_valid_blobhash(blob_hash):
             raise Exception("invalid blob hash to delete")
 
-        if blob_hash not in self.blobs:
-            if self.blob_dir and os.path.isfile(os.path.join(self.blob_dir, blob_hash)):
-                os.remove(os.path.join(self.blob_dir, blob_hash))
-        else:
+        if blob_hash in self.blobs:
             self.blobs.pop(blob_hash).delete()
             if blob_hash in self.completed_blob_hashes:
                 self.completed_blob_hashes.remove(blob_hash)
+
+        elif self.blob_dir and os.path.isfile(os.path.join(self.blob_dir, blob_hash)):
+            os.remove(os.path.join(self.blob_dir, blob_hash))
 
     async def delete_blobs(self, blob_hashes: typing.List[str], delete_from_db: typing.Optional[bool] = True):
         for blob_hash in blob_hashes:

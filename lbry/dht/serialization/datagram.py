@@ -36,7 +36,7 @@ class KademliaDatagramBase:
             raise ValueError(f"invalid packet type: {packet_type}, expected {self.expected_packet_type}")
         if len(rpc_id) != constants.RPC_ID_LENGTH:
             raise ValueError(f"invalid rpc node_id: {len(rpc_id)} bytes (expected 20)")
-        if not len(node_id) == constants.HASH_LENGTH:
+        if len(node_id) != constants.HASH_LENGTH:
             raise ValueError(f"invalid node node_id: {len(node_id)} bytes (expected 48)")
         self.rpc_id = rpc_id
         self.node_id = node_id

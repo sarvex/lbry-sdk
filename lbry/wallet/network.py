@@ -42,9 +42,7 @@ class ClientSession(BaseClientSession):
 
     @property
     def server_address_and_port(self) -> Optional[Tuple[str, int]]:
-        if not self.transport:
-            return None
-        return self.transport.get_extra_info('peername')
+        return self.transport.get_extra_info('peername') if self.transport else None
 
     async def send_timed_server_version_request(self, args=(), timeout=None):
         timeout = timeout or self.timeout

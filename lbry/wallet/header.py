@@ -109,10 +109,9 @@ class Headers:
 
     def get_next_block_target(self, max_target: ArithUint256, previous: Optional[dict],
                               current: Optional[dict]) -> ArithUint256:
-        # https://github.com/lbryio/lbrycrd/blob/master/src/lbry.cpp
-        if previous is None and current is None:
-            return max_target
         if previous is None:
+            if current is None:
+                return max_target
             previous = current
         actual_timespan = current['timestamp'] - previous['timestamp']
         modulated_timespan = self.target_timespan + int((actual_timespan - self.target_timespan) / 8)
@@ -120,8 +119,7 @@ class Headers:
         maximum_timespan = self.target_timespan + int(self.target_timespan / 2)  # 150 + 75 = 225
         clamped_timespan = max(minimum_timespan, min(modulated_timespan, maximum_timespan))
         target = ArithUint256.from_compact(current['bits'])
-        new_target = min(max_target, (target * clamped_timespan) / self.target_timespan)
-        return new_target
+        return min(max_target, (target * clamped_timespan) / self.target_timespan)
 
     def __len__(self) -> int:
         return self._size
@@ -226,9 +224,7 @@ class Headers:
 
     @staticmethod
     def hash_header(header: bytes) -> bytes:
-        if header is None:
-            return b'0' * 64
-        return hexlify(double_sha256(header)[::-1])
+        return b'0' * 64 if header is None else hexlify(double_sha256(header)[::-1])
 
     async def connect(self, start: int, headers: bytes) -> int:
         added = 0
@@ -284,16 +280,16 @@ class Headers:
 
         if header['prev_block_hash'] != previous_hash:
             raise InvalidHeader(
-                height, "previous hash mismatch: {} vs expected {}".format(
-                    header['prev_block_hash'].decode(), previous_hash.decode())
+                height,
+                f"previous hash mismatch: {header['prev_block_hash'].decode()} vs expected {previous_hash.decode()}",
             )
 
         if self.validate_difficulty:
 
             if header['bits'] != target.compact:
                 raise InvalidHeader(
-                    height, "bits mismatch: {} vs expected {}".format(
-                        header['bits'], target.compact)
+                    height,
+                    f"bits mismatch: {header['bits']} vs expected {target.compact}",
                 )
 
             proof_of_work = self.get_proof_of_work(current_hash)
@@ -311,13 +307,15 @@ class Headers:
                 headers = headers[:(len(headers) // self.header_size) * self.header_size]
             for header_hash, header in self._iterate_headers(height, headers):
                 height = header['block_height']
-                if previous_header_hash:
-                    if header['prev_block_hash'] != previous_header_hash:
-                        fail = True
-                elif height == 0:
-                    if header_hash != self.genesis_hash:
-                        fail = True
-                else:
+                if (
+                    previous_header_hash
+                    and header['prev_block_hash'] != previous_header_hash
+                    or not previous_header_hash
+                    and height == 0
+                    and header_hash != self.genesis_hash
+                ):
+                    fail = True
+                elif not previous_header_hash and height != 0:
                     # for sanity and clarity, since it is the only way we can end up here
                     assert start_height > 0 and height == start_height
                 if fail:

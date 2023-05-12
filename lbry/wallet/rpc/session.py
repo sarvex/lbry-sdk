@@ -370,9 +370,10 @@ class BatchRequest:
             await self._session._send_message(message)
             await event.wait()
             self.results = event.result
-            if self._raise_errors:
-                if any(isinstance(item, Exception) for item in event.result):
-                    raise BatchError(self)
+            if self._raise_errors and any(
+                isinstance(item, Exception) for item in event.result
+            ):
+                raise BatchError(self)
 
 
 NAMESPACE = "wallet_server"

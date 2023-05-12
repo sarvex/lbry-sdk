@@ -50,15 +50,11 @@ def normalize_value(x, key=None):
         return True
     if x.lower() == 'false':
         return False
-    if x.isdigit():
-        return int(x)
-    return x
+    return int(x) if x.isdigit() else x
 
 
 def remove_brackets(key):
-    if key.startswith("<") and key.endswith(">"):
-        return str(key[1:-1])
-    return key
+    return str(key[1:-1]) if key.startswith("<") and key.endswith(">") else key
 
 
 def set_kwargs(parsed_args):

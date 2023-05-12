@@ -46,10 +46,9 @@ def add_lbry_file_metadata(db_dir):
     for (sd_hash, stream_hash) in lbryfile_cursor.execute("select * "
                                                           "from lbry_file_descriptors").fetchall():
         lbry_file_id = lbry_files[stream_hash]
-        outpoint = name_metadata_cursor.execute("select txid, n from name_metadata "
-                                                "where sd_hash=?",
-                                                (sd_hash,)).fetchall()
-        if outpoint:
+        if outpoint := name_metadata_cursor.execute(
+            "select txid, n from name_metadata " "where sd_hash=?", (sd_hash,)
+        ).fetchall():
             txid, nout = outpoint[0]
             lbryfile_cursor.execute("insert into lbry_file_metadata values (?, ?, ?)",
                                     (lbry_file_id, txid, nout))

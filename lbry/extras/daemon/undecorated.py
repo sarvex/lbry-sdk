@@ -52,8 +52,7 @@ def undecorated(o):
             # Note: this favors supporting decorators defined without
             # @wraps to the detriment of function/method/class closures
             if looks_like_a_decorator(cell.cell_contents):
-                undecd = undecorated(cell.cell_contents)
-                if undecd:
+                if undecd := undecorated(cell.cell_contents):
                     return undecd
     return o
 

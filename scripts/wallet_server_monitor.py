@@ -15,7 +15,7 @@ try:
 except ImportError:
     print(f"To run {sys.argv[0]} you need to install aiohttp, psycopg2 and slackclient:")
     print(f"")
-    print(f"  $ pip install aiohttp psycopg2 slackclient")
+    print("  $ pip install aiohttp psycopg2 slackclient")
     print("")
     sys.exit(1)
 
@@ -48,16 +48,16 @@ async def handle_analytics_event(cursor, event, server):
                     await handle_slow_query(cursor, server, command, value)
                 continue
             if isinstance(value, list):
-                data.update({
-                    key + '_avg': value[0],
-                    key + '_min': value[1],
-                    key + '_five': value[2],
-                    key + '_twenty_five': value[3],
-                    key + '_fifty': value[4],
-                    key + '_seventy_five': value[5],
-                    key + '_ninety_five': value[6],
-                    key + '_max': value[7],
-                })
+                data |= {
+                    f'{key}_avg': value[0],
+                    f'{key}_min': value[1],
+                    f'{key}_five': value[2],
+                    f'{key}_twenty_five': value[3],
+                    f'{key}_fifty': value[4],
+                    f'{key}_seventy_five': value[5],
+                    f'{key}_ninety_five': value[6],
+                    f'{key}_max': value[7],
+                }
             else:
                 data[key] = value
 
@@ -278,8 +278,7 @@ def ensure_database(dsn):
 def get_dsn(args):
     dsn = {}
     for attr in ('dbname', 'user', 'password', 'host', 'port'):
-        value = getattr(args, f'pg_{attr}')
-        if value:
+        if value := getattr(args, f'pg_{attr}'):
             dsn[attr] = value
     return dsn
 

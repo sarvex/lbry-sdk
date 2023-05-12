@@ -68,7 +68,5 @@ if __name__ == "__main__":
         print("usage: download_blob_from_peer.py <blob_hash> [host_url:port]")
         sys.exit(1)
 
-    url = 'reflector.lbry.com:5567'
-    if len(sys.argv) > 2:
-        url = sys.argv[2]
+    url = sys.argv[2] if len(sys.argv) > 2 else 'reflector.lbry.com:5567'
     asyncio.run(main(sys.argv[1], url))

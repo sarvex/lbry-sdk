@@ -36,7 +36,7 @@ def refresh(routing_table_info):
 
     y = 3
     for i in range(len(buckets)):
-        stdscr.addstr(y, 0, "bucket %s" % i)
+        stdscr.addstr(y, 0, f"bucket {i}")
         y += 1
         for peer in buckets[str(i)]:
             stdscr.addstr(y, 0, f"{peer['node_id'][:8]} ({peer['address']}:{peer['udp_port']})")

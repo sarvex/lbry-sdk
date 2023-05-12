@@ -116,15 +116,11 @@ class KBucket:
         current_len = len(peers)
 
         # If count greater than k - return only k contacts
-        if count > constants.K:
-            count = constants.K
-
+        count = min(count, constants.K)
         if not current_len:
             return peers
 
-        if sort_distance_to is False:
-            pass
-        else:
+        if sort_distance_to is not False:
             sort_distance_to = sort_distance_to or self._node_id
             peers.sort(key=lambda c: Distance(sort_distance_to)(c.node_id))
 
@@ -226,8 +222,7 @@ class TreeRoutingTable:
         count = count or constants.K
         distance = Distance(key)
         contacts = self.get_peers()
-        contacts = [c for c in contacts if c.node_id not in exclude]
-        if contacts:
+        if contacts := [c for c in contacts if c.node_id not in exclude]:
             contacts.sort(key=lambda c: distance(c.node_id))
             return contacts[:min(count, len(contacts))]
         return []
@@ -236,16 +231,21 @@ class TreeRoutingTable:
         return self.buckets[self._kbucket_index(contact_id)].get_peer(contact_id)
 
     def get_refresh_list(self, start_index: int = 0, force: bool = False) -> typing.List[bytes]:
-        refresh_ids = []
-        for offset, _ in enumerate(self.buckets[start_index:]):
-            refresh_ids.append(self._midpoint_id_in_bucket_range(start_index + offset))
+        refresh_ids = [
+            self._midpoint_id_in_bucket_range(start_index + offset)
+            for offset, _ in enumerate(self.buckets[start_index:])
+        ]
         # if we have 3 or fewer populated buckets get two random ids in the range of each to try and
         # populate/split the buckets further
         buckets_with_contacts = self.buckets_with_contacts()
         if buckets_with_contacts <= 3:
             for i in range(buckets_with_contacts):
-                refresh_ids.append(self._random_id_in_bucket_range(i))
-                refresh_ids.append(self._random_id_in_bucket_range(i))
+                refresh_ids.extend(
+                    (
+                        self._random_id_in_bucket_range(i),
+                        self._random_id_in_bucket_range(i),
+                    )
+                )
         return refresh_ids
 
     def remove_peer(self, peer: 'KademliaPeer') -> None:
@@ -268,7 +268,10 @@ class TreeRoutingTable:
         return i
 
     def _random_id_in_bucket_range(self, bucket_index: int) -> bytes:
-        random_id = int(random.randrange(self.buckets[bucket_index].range_min, self.buckets[bucket_index].range_max))
+        random_id = random.randrange(
+            self.buckets[bucket_index].range_min,
+            self.buckets[bucket_index].range_max,
+        )
         return Distance(
             self._parent_node_id
         )(random_id.to_bytes(constants.HASH_LENGTH, 'big')).to_bytes(constants.HASH_LENGTH, 'big')
@@ -313,7 +316,7 @@ class TreeRoutingTable:
         log.info("join buckets %i", len(to_pop))
         bucket_index_to_pop = to_pop[0]
         assert len(self.buckets[bucket_index_to_pop]) == 0
-        can_go_lower = bucket_index_to_pop - 1 >= 0
+        can_go_lower = bucket_index_to_pop >= 1
         can_go_higher = bucket_index_to_pop + 1 < len(self.buckets)
         assert can_go_higher or can_go_lower
         bucket = self.buckets[bucket_index_to_pop]
@@ -330,11 +333,7 @@ class TreeRoutingTable:
         return self._join_buckets()
 
     def buckets_with_contacts(self) -> int:
-        count = 0
-        for bucket in self.buckets:
-            if len(bucket) > 0:
-                count += 1
-        return count
+        return sum(1 for bucket in self.buckets if len(bucket) > 0)
 
     async def add_peer(self, peer: 'KademliaPeer', probe: typing.Callable[['KademliaPeer'], typing.Awaitable]):
         if not peer.node_id:

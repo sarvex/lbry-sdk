@@ -39,7 +39,7 @@ def _event_properties(installation_id: str, session_id: str,
         'lbry_id': installation_id,
         'session_id': session_id,
     }
-    properties.update(event_properties or {})
+    properties |= (event_properties or {})
     return properties
 
 
@@ -144,17 +144,21 @@ class AnalyticsManager:
     async def _post(self, data: typing.Dict):
         request_kwargs = {
             'method': 'POST',
-            'url': self.url + '/track',
+            'url': f'{self.url}/track',
             'headers': {'Connection': 'Close'},
             'auth': aiohttp.BasicAuth(self._write_key, ''),
             'json': data,
-            'cookies': self.cookies
+            'cookies': self.cookies,
         }
         try:
             async with utils.aiohttp_request(**request_kwargs) as response:
                 self.cookies.update(response.cookies)
         except Exception as e:
-            log.debug('Encountered an exception while POSTing to %s: ', self.url + '/track', exc_info=e)
+            log.debug(
+                'Encountered an exception while POSTing to %s: ',
+                f'{self.url}/track',
+                exc_info=e,
+            )
 
     async def track(self, event: typing.Dict):
         """Send a single tracking event"""

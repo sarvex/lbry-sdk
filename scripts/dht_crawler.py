@@ -269,8 +269,11 @@ class Crawler:
         return len([peer for peer in self.all_peers if (peer.errors or 0) > 0])
 
     def get_peers_needing_check(self):
-        to_check = [peer for peer in self.all_peers if peer.last_check is None or peer.last_check < self.refresh_limit]
-        return to_check
+        return [
+            peer
+            for peer in self.all_peers
+            if peer.last_check is None or peer.last_check < self.refresh_limit
+        ]
 
     def remove_expired_peers(self):
         for key, peer in list(self._memory_peers.items()):
@@ -374,10 +377,9 @@ class Crawler:
                     pass
                 except lbry.dht.error.RemoteException:
                     self.inc_errors(peer)
-                    pass
             self.set_latency(peer, latency if peer.node_id else None)
             if not latency or not peer.node_id:
-                if latency and not peer.node_id:
+                if latency:
                     log.warning("No node id from %s:%d", host, port)
                 return set()
         distance = Distance(key)
@@ -396,13 +398,12 @@ class Crawler:
                 current_distance = distance(key)
                 next_jump = current_distance + int(max_distance // factor)  # jump closer
                 factor /= 2
-                if factor > 8 and next_jump < max_distance:
-                    key = int.from_bytes(peer.node_id, 'big') ^ next_jump
-                    if key.bit_length() > 384:
-                        break
-                    key = key.to_bytes(48, 'big')
-                else:
+                if factor <= 8 or next_jump >= max_distance:
                     break
+                key = int.from_bytes(peer.node_id, 'big') ^ next_jump
+                if key.bit_length() > 384:
+                    break
+                key = key.to_bytes(48, 'big')
             else:
                 key = far_key
                 factor = 2048
@@ -509,9 +510,10 @@ async def test():
     await crawler.flush_to_db()
     await crawler.node.start_listening()
     if crawler.active_peers_count < 100:
-        probes = []
-        for (host, port) in conf.known_dht_nodes:
-            probes.append(asyncio.create_task(crawler.crawl_routing_table(host, port)))
+        probes = [
+            asyncio.create_task(crawler.crawl_routing_table(host, port))
+            for host, port in conf.known_dht_nodes
+        ]
         await asyncio.gather(*probes)
         await crawler.flush_to_db()
     await asyncio.gather(crawler.process(), crawler.probe_files())

@@ -38,11 +38,11 @@ def utcnow():
 
 def isonow():
     """Return utc now in isoformat with timezone"""
-    return utcnow().isoformat() + 'Z'
+    return f'{utcnow().isoformat()}Z'
 
 
 def today():
-    return datetime.datetime.today()
+    return datetime.datetime.now()
 
 
 def timedelta(**kwargs):
@@ -184,11 +184,9 @@ async def resolve_host(url: str, port: int, proto: str) -> str:
         raise Exception("invalid protocol")
     if url.lower() == 'localhost':
         return '127.0.0.1'
-    try:
+    with contextlib.suppress(ValueError):
         if ipaddress.ip_address(url):
             return url
-    except ValueError:
-        pass
     loop = asyncio.get_running_loop()
     return (await loop.getaddrinfo(
         url, port,
@@ -426,12 +424,10 @@ async def _get_external_ip(default_servers) -> typing.Tuple[typing.Optional[str]
         random.shuffle(randomized_servers)
         for server in randomized_servers:
             connection.ping(server)
-            try:
+            with contextlib.suppress(asyncio.TimeoutError):
                 _, pong = await asyncio.wait_for(pong_responses.get(), 1)
                 if is_valid_public_ipv4(pong.ip_address):
                     return pong.ip_address, ip_to_hostnames[server][0]
-            except asyncio.TimeoutError:
-                pass
         return None, None
     finally:
         connection.close()

@@ -116,8 +116,7 @@ class ConductorService:
                     if msg.data == 'close':
                         await web_socket.close()
                 elif msg.type == WSMsgType.ERROR:
-                    print('web socket connection closed with exception %s' %
-                          web_socket.exception())
+                    print(f'web socket connection closed with exception {web_socket.exception()}')
         finally:
             self.app['websockets'].remove(web_socket)
         return web_socket

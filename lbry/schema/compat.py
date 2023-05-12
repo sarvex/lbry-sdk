@@ -26,8 +26,7 @@ def from_old_json_schema(claim, payload: bytes):
     stream.author = value.get('author', '')
     stream.license = value.get('license', '')
     stream.license_url = value.get('license_url', '')
-    language = value.get('language', '')
-    if language:
+    if language := value.get('language', ''):
         if language.lower() == 'english':
             language = 'en'
         try:

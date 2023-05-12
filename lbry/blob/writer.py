@@ -56,7 +56,11 @@ class HashBlobWriter:
                 self.finished.set_exception(InvalidBlobHashError(
                     f"blob hash is {blob_hash} vs expected {self.expected_blob_hash}"
                 ))
-            elif self.finished and not (self.finished.done() or self.finished.cancelled()):
+            elif (
+                self.finished
+                and not self.finished.done()
+                and not self.finished.cancelled()
+            ):
                 self.finished.set_result(self.buffer.getvalue())
             self.close_handle()
 

@@ -162,9 +162,12 @@ def _parse_blob_response(response_msg: bytes) -> typing.Tuple[typing.Optional[ty
             BlobPriceResponse.key,
             BlobDownloadResponse.key
         }
-        if isinstance(response, dict) and response.keys():
-            if set(response.keys()).issubset(possible_response_keys):
-                return response, response_msg[curr_pos:]
+        if (
+            isinstance(response, dict)
+            and response.keys()
+            and set(response.keys()).issubset(possible_response_keys)
+        ):
+            return response, response_msg[curr_pos:]
         return None, response_msg
 
 
@@ -175,32 +178,29 @@ class BlobRequest:
     def to_dict(self):
         d = {}
         for request in self.requests:
-            d.update(request.to_dict())
+            d |= request.to_dict()
         return d
 
     def _get_request(self, request_type: blob_request_types):
-        request = tuple(filter(lambda r: type(r) == request_type, self.requests))  # pylint: disable=unidiomatic-typecheck
-        if request:
+        if request := tuple(
+            filter(lambda r: type(r) == request_type, self.requests)
+        ):
             return request[0]
 
     def get_availability_request(self) -> typing.Optional[BlobAvailabilityRequest]:
-        response = self._get_request(BlobAvailabilityRequest)
-        if response:
+        if response := self._get_request(BlobAvailabilityRequest):
             return response
 
     def get_price_request(self) -> typing.Optional[BlobPriceRequest]:
-        response = self._get_request(BlobPriceRequest)
-        if response:
+        if response := self._get_request(BlobPriceRequest):
             return response
 
     def get_blob_request(self) -> typing.Optional[BlobDownloadRequest]:
-        response = self._get_request(BlobDownloadRequest)
-        if response:
+        if response := self._get_request(BlobDownloadRequest):
             return response
 
     def get_address_request(self) -> typing.Optional[BlobPaymentAddressRequest]:
-        response = self._get_request(BlobPaymentAddressRequest)
-        if response:
+        if response := self._get_request(BlobPaymentAddressRequest):
             return response
 
     def serialize(self) -> bytes:
@@ -231,38 +231,34 @@ class BlobResponse:
     def to_dict(self):
         d = {}
         for response in self.responses:
-            d.update(response.to_dict())
+            d |= response.to_dict()
         return d
 
     def _get_response(self, response_type: blob_response_types):
-        response = tuple(filter(lambda r: type(r) == response_type, self.responses))  # pylint: disable=unidiomatic-typecheck
-        if response:
+        if response := tuple(
+            filter(lambda r: type(r) == response_type, self.responses)
+        ):
             return response[0]
 
     def get_error_response(self) -> typing.Optional[BlobErrorResponse]:
-        error = self._get_response(BlobErrorResponse)
-        if error:
+        if error := self._get_response(BlobErrorResponse):
             log.error(error)
             return error
 
     def get_availability_response(self) -> typing.Optional[BlobAvailabilityResponse]:
-        response = self._get_response(BlobAvailabilityResponse)
-        if response:
+        if response := self._get_response(BlobAvailabilityResponse):
             return response
 
     def get_price_response(self) -> typing.Optional[BlobPriceResponse]:
-        response = self._get_response(BlobPriceResponse)
-        if response:
+        if response := self._get_response(BlobPriceResponse):
             return response
 
     def get_blob_response(self) -> typing.Optional[BlobDownloadResponse]:
-        response = self._get_response(BlobDownloadResponse)
-        if response:
+        if response := self._get_response(BlobDownloadResponse):
             return response
 
     def get_address_response(self) -> typing.Optional[BlobPaymentAddressResponse]:
-        response = self._get_response(BlobPaymentAddressResponse)
-        if response:
+        if response := self._get_response(BlobPaymentAddressResponse):
             return response
 
     def serialize(self) -> bytes:

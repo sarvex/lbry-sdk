@@ -184,8 +184,7 @@ def guess_media_type(path):
     extension = ext.strip().lower()
 
     try:
-        kind = filetype.guess(path)
-        if kind:
+        if kind := filetype.guess(path):
             real_extension = f".{kind.extension}"
 
             if extension != real_extension:
@@ -208,7 +207,11 @@ def guess_media_type(path):
 
 
 def guess_stream_type(media_type):
-    for media, stream in types_map.values():
-        if media == media_type:
-            return stream
-    return 'binary'
+    return next(
+        (
+            stream
+            for media, stream in types_map.values()
+            if media == media_type
+        ),
+        'binary',
+    )

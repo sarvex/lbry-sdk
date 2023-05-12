@@ -7,9 +7,10 @@ def do_migration(conf):
     connection = sqlite3.connect(db_path)
     cursor = connection.cursor()
 
-    current_columns = []
-    for col_info in cursor.execute("pragma table_info('file');").fetchall():
-        current_columns.append(col_info[1])
+    current_columns = [
+        col_info[1]
+        for col_info in cursor.execute("pragma table_info('file');").fetchall()
+    ]
     if 'bt_infohash' in current_columns:
         connection.close()
         print("already migrated")

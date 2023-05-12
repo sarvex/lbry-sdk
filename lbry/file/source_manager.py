@@ -120,15 +120,16 @@ class SourceManager:
             comparison = comparison or 'eq'
             streams = []
             for stream in self._sources.values():
-                if compare_sets and not all(
-                        getattr(stream, self.set_filter_fields[set_search]) in val
-                        for set_search, val in compare_sets.items()):
+                if compare_sets and any(
+                    getattr(stream, self.set_filter_fields[set_search]) not in val
+                    for set_search, val in compare_sets.items()
+                ):
                     continue
-                if search_by and not all(
-                        COMPARISON_OPERATORS[comparison](getattr(stream, search), val)
-                        for search, val in search_by.items()):
-                    continue
-                streams.append(stream)
+                if not search_by or all(
+                    COMPARISON_OPERATORS[comparison](getattr(stream, search), val)
+                    for search, val in search_by.items()
+                ):
+                    streams.append(stream)
         else:
             streams = list(self._sources.values())
         if sort_by:

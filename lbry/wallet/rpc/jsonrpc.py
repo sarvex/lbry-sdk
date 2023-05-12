@@ -321,11 +321,10 @@ class JSONRPC:
         """Convert messages, one per batch item, into a batch message.  At
         least one message must be passed.
         """
-        # Comma-separate the messages and wrap the lot in square brackets
-        middle = b', '.join(messages)
-        if not middle:
+        if middle := b', '.join(messages):
+            return b''.join([b'[', middle, b']'])
+        else:
             raise ProtocolError.empty_batch()
-        return b''.join([b'[', middle, b']'])
 
     @classmethod
     def encode_payload(cls, payload):
@@ -731,17 +730,19 @@ class JSONRPCConnection:
         if isinstance(item, Response):
             return self._receive_response(item.result, request_id)
         if isinstance(item, list):
-            if all(isinstance(payload, dict)
-                   and ('result' in payload or 'error' in payload)
-                   for payload in item):
-                return self._receive_response_batch(item)
-            else:
-                return self._receive_request_batch(item)
-        else:
-            # Protocol auto-detection hack
-            assert issubclass(item, JSONRPC)
-            self._protocol = item
-            return self.receive_message(message)
+            return (
+                self._receive_response_batch(item)
+                if all(
+                    isinstance(payload, dict)
+                    and ('result' in payload or 'error' in payload)
+                    for payload in item
+                )
+                else self._receive_request_batch(item)
+            )
+        # Protocol auto-detection hack
+        assert issubclass(item, JSONRPC)
+        self._protocol = item
+        return self.receive_message(message)
 
     def raise_pending_requests(self, exception):
         exception = exception or asyncio.TimeoutError()
@@ -783,8 +784,7 @@ def handler_invocation(handler, request):
         raise RPCError.invalid_args(f'method "{method}" cannot '
                                     f'be called with named arguments')
 
-    missing = set(info.required_names).difference(args)
-    if missing:
+    if missing := set(info.required_names).difference(args):
         s = '' if len(missing) == 1 else 's'
         missing = ', '.join(sorted(f'"{name}"' for name in missing))
         raise RPCError.invalid_args(f'method "{method}" requires '
@@ -792,8 +792,7 @@ def handler_invocation(handler, request):
 
     if info.other_names is not any:
         excess = set(args).difference(info.required_names)
-        excess = excess.difference(info.other_names)
-        if excess:
+        if excess := excess.difference(info.other_names):
             s = '' if len(excess) == 1 else 's'
             excess = ', '.join(sorted(f'"{name}"' for name in excess))
             raise RPCError.invalid_args(f'method "{method}" does not '

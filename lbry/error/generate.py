@@ -30,7 +30,7 @@ class ErrorClass:
             self.other_parents = name[name.find('(')+1:name.find(')')].split(',')
             name = name[:name.find('(')]
         self.name = name
-        self.class_name = name+'Error'
+        self.class_name = f'{name}Error'
         self.message = message
         self.comment = ""
         if '--' in message:
@@ -48,7 +48,7 @@ class ErrorClass:
 
     @property
     def parent_codes(self):
-        return self.hierarchy[0:2], self.hierarchy[0]
+        return self.hierarchy[:2], self.hierarchy[0]
 
     def get_arguments(self):
         args = ['self']
@@ -73,10 +73,7 @@ class ErrorClass:
         return ""
 
     def render(self, out, parent):
-        if not parent:
-            parents = ['BaseError']
-        else:
-            parents = [parent.class_name]
+        parents = ['BaseError'] if not parent else [parent.class_name]
         parents += self.other_parents
         args = self.get_arguments()
         if self.is_leaf:
@@ -109,8 +106,7 @@ def get_errors():
 
 def find_parent(stack, child):
     for parent_code in child.parent_codes:
-        parent = stack.get(parent_code)
-        if parent:
+        if parent := stack.get(parent_code):
             return parent
 
 
@@ -133,7 +129,7 @@ def analyze():
             continue
         with open(file_path) as src_file:
             src = src_file.read()
-            for error in errors.keys():
+            for error in errors:
                 found = src.count(error)
                 if found > 0:
                     errors[error].append((file_path, found))

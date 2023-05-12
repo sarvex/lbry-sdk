@@ -156,12 +156,12 @@ class WalletComponent(Component):
             else:
                 progress = 100
             best_hash = await self.wallet_manager.get_best_blockhash()
-            result.update({
+            result |= {
                 'headers_synchronization_progress': progress,
                 'blocks': max(local_height, 0),
                 'blocks_behind': max(remote_height - local_height, 0),
                 'best_blockhash': best_hash,
-            })
+            }
 
         return result
 
@@ -219,8 +219,7 @@ class BlobComponent(Component):
         storage = self.component_manager.get_component(DATABASE_COMPONENT)
         data_store = None
         if DHT_COMPONENT not in self.component_manager.skip_components:
-            dht_node: Node = self.component_manager.get_component(DHT_COMPONENT)
-            if dht_node:
+            if dht_node := self.component_manager.get_component(DHT_COMPONENT):
                 data_store = dht_node.protocol.data_store
         blob_dir = os.path.join(self.conf.data_dir, 'blobfiles')
         if not os.path.isdir(blob_dir):
@@ -280,8 +279,8 @@ class DHTComponent(Component):
         storage = self.component_manager.get_component(DATABASE_COMPONENT)
         if not external_ip:
             external_ip, _ = await utils.get_external_ip(self.conf.lbryum_servers)
-            if not external_ip:
-                log.warning("failed to get external ip")
+        if not external_ip:
+            log.warning("failed to get external ip")
 
         self.dht_node = Node(
             self.component_manager.loop,
@@ -581,8 +580,9 @@ class UPnPComponent(Component):
             log.info("external ip changed from %s to %s", self.external_ip, external_ip)
         if external_ip:
             self.external_ip = external_ip
-            dht_component = self.component_manager.get_component(DHT_COMPONENT)
-            if dht_component:
+            if dht_component := self.component_manager.get_component(
+                DHT_COMPONENT
+            ):
                 dht_node = dht_component.component
                 dht_node.protocol.external_ip = external_ip
         # assert self.external_ip is not None   # TODO: handle going/starting offline
@@ -612,9 +612,12 @@ class UPnPComponent(Component):
             mappings = await self.upnp.get_redirects()
             for mapping in mappings:
                 proto = mapping.protocol
-                if proto in self.upnp_redirects and mapping.external_port == self.upnp_redirects[proto]:
-                    if mapping.lan_address == self.upnp.lan_address:
-                        found.add(proto)
+                if (
+                    proto in self.upnp_redirects
+                    and mapping.external_port == self.upnp_redirects[proto]
+                    and mapping.lan_address == self.upnp.lan_address
+                ):
+                    found.add(proto)
             if 'UDP' not in found and DHT_COMPONENT not in self.component_manager.skip_components:
                 try:
                     udp_port = await self.upnp.get_next_mapping(self._int_dht_node_port, "UDP", "LBRY DHT port")
@@ -629,11 +632,19 @@ class UPnPComponent(Component):
                     log.info("refreshed upnp redirect for peer port: %i", tcp_port)
                 except (asyncio.TimeoutError, UPnPError, NotImplementedError):
                     del self.upnp_redirects['TCP']
-            if ('TCP' in self.upnp_redirects and
-                    PEER_PROTOCOL_SERVER_COMPONENT not in self.component_manager.skip_components) and \
-                    ('UDP' in self.upnp_redirects and DHT_COMPONENT not in self.component_manager.skip_components):
-                if self.upnp_redirects:
-                    log.debug("upnp redirects are still active")
+            if (
+                (
+                    'TCP' in self.upnp_redirects
+                    and PEER_PROTOCOL_SERVER_COMPONENT
+                    not in self.component_manager.skip_components
+                )
+                and (
+                    'UDP' in self.upnp_redirects
+                    and DHT_COMPONENT not in self.component_manager.skip_components
+                )
+                and self.upnp_redirects
+            ):
+                log.debug("upnp redirects are still active")
 
     async def start(self):
         log.info("detecting external ip")
@@ -643,9 +654,9 @@ class UPnPComponent(Component):
         success = False
         await self._maintain_redirects()
         if self.upnp:
-            if not self.upnp_redirects and not all(
-                    x in self.component_manager.skip_components
-                    for x in (DHT_COMPONENT, PEER_PROTOCOL_SERVER_COMPONENT)
+            if not self.upnp_redirects and any(
+                x not in self.component_manager.skip_components
+                for x in (DHT_COMPONENT, PEER_PROTOCOL_SERVER_COMPONENT)
             ):
                 log.error("failed to setup upnp")
             else:
@@ -725,13 +736,13 @@ class TrackerAnnouncerComponent(Component):
         return self._running and self.announce_task and not self.announce_task.done()
 
     async def announce_forever(self):
+        sleep_seconds = 60.0
         while True:
-            sleep_seconds = 60.0
-            announce_sd_hashes = []
-            for file in self.file_manager.get_filtered():
-                if not file.downloader:
-                    continue
-                announce_sd_hashes.append(bytes.fromhex(file.sd_hash))
+            announce_sd_hashes = [
+                bytes.fromhex(file.sd_hash)
+                for file in self.file_manager.get_filtered()
+                if file.downloader
+            ]
             await self.tracker_client.announce_many(*announce_sd_hashes)
             await asyncio.sleep(sleep_seconds)
 

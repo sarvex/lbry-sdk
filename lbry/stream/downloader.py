@@ -56,8 +56,11 @@ class StreamDownloader:
 
         if not self.config.fixed_peers:
             return
-        if 'dht' in self.config.components_to_skip or not self.node or not \
-                len(self.node.protocol.routing_table.get_peers()) > 0:
+        if (
+            'dht' in self.config.components_to_skip
+            or not self.node
+            or len(self.node.protocol.routing_table.get_peers()) <= 0
+        ):
             self.fixed_peers_delay = 0.0
         else:
             self.fixed_peers_delay = self.config.fixed_peer_delay
@@ -109,11 +112,12 @@ class StreamDownloader:
     async def download_stream_blob(self, blob_info: 'BlobInfo', connection_id: int = 0) -> 'AbstractBlob':
         if not filter(lambda b: b.blob_hash == blob_info.blob_hash, self.descriptor.blobs[:-1]):
             raise ValueError(f"blob {blob_info.blob_hash} is not part of stream with sd hash {self.sd_hash}")
-        blob = await asyncio.wait_for(
-            self.blob_downloader.download_blob(blob_info.blob_hash, blob_info.length, connection_id),
-            self.config.blob_download_timeout * 10
+        return await asyncio.wait_for(
+            self.blob_downloader.download_blob(
+                blob_info.blob_hash, blob_info.length, connection_id
+            ),
+            self.config.blob_download_timeout * 10,
         )
-        return blob
 
     def decrypt_blob(self, blob_info: 'BlobInfo', blob: 'AbstractBlob') -> bytes:
         return blob.decrypt(
@@ -121,9 +125,7 @@ class StreamDownloader:
         )
 
     async def read_blob(self, blob_info: 'BlobInfo', connection_id: int = 0) -> bytes:
-        start = None
-        if self.time_to_first_bytes is None:
-            start = self.loop.time()
+        start = self.loop.time() if self.time_to_first_bytes is None else None
         blob = await self.download_stream_blob(blob_info, connection_id)
         decrypted = self.decrypt_blob(blob_info, blob)
         if start:

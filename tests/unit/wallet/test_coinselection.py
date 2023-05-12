@@ -121,8 +121,7 @@ class TestOfficialBitcoinCoinSelectionTests(BaseSelectionTestCase):
         for i in range(utxos):
             amount = 1 << (utxos+i)
             target += amount
-            utxo_pool.append(utxo(amount))
-            utxo_pool.append(utxo(amount + (1 << (utxos-1-i))))
+            utxo_pool.extend((utxo(amount), utxo(amount + (1 << (utxos-1-i)))))
         return self.estimates(utxo_pool), target
 
     def test_branch_and_bound_coin_selection(self):

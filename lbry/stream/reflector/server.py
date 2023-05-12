@@ -60,7 +60,7 @@ class ReflectorServerProtocol(asyncio.Protocol):
             return
         try:
             request = json.loads(data.decode())
-        except (ValueError, JSONDecodeError):
+        except ValueError:
             return
         self.loop.create_task(self.handle_request(request))
 

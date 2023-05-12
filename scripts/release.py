@@ -90,7 +90,7 @@ class Version:
     @classmethod
     def from_content(cls, content):
         src = content.decoded.decode('utf-8')
-        version = re.search('__version__ = "(.*?)"', src).group(1)
+        version = re.search('__version__ = "(.*?)"', src)[1]
         return cls.from_string(version)
 
     def increment(self, action):
@@ -147,10 +147,11 @@ def release(args):
         user_url = f'[{pr.user["login"]}]({pr.user["html_url"]})'
         if area_labels and type_label:
             for area_name in area_labels:
-                for incompat in get_backwards_incompatible(pr.body or ""):
-                    incompats.append(f'  * [{area_name}] {incompat.strip()} ({pr_url})')
-                for release_text in get_release_text(pr.body or ""):
-                    release_texts.append(release_text)
+                incompats.extend(
+                    f'  * [{area_name}] {incompat.strip()} ({pr_url})'
+                    for incompat in get_backwards_incompatible(pr.body or "")
+                )
+                release_texts.extend(iter(get_release_text(pr.body or "")))
                 if type_label == 'fixup':
                     fixups.append(f'  * {pr.title} ({pr_url}) by {user_url}')
                 else:
@@ -159,9 +160,7 @@ def release(args):
         else:
             unlabeled.append(f'  * {pr.title} ({pr_url}) by {user_url}')
 
-    area_names = list(areas.keys())
-    area_names.sort()
-
+    area_names = sorted(areas.keys())
     body = io.StringIO()
     w = lambda s: body.write(s+'\n')
 
@@ -172,7 +171,7 @@ def release(args):
             w(release_text)
     if incompats:
         w('')
-        w(f'### Backwards Incompatible Changes')
+        w('### Backwards Incompatible Changes')
         for incompat in incompats:
             w(incompat)
     for area in area_names:
@@ -248,11 +247,7 @@ def main():
     parser.add_argument("action", choices=['test', 'current', 'major', 'minor', 'micro'])
     args = parser.parse_args()
 
-    if args.action == "test":
-        code = test()
-    else:
-        code = release(args)
-
+    code = test() if args.action == "test" else release(args)
     print()
     return code
 

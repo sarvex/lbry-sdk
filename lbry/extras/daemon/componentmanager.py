@@ -12,8 +12,8 @@ class RegisteredConditions:
 
 
 class RequiredConditionType(type):
-    def __new__(mcs, name, bases, newattrs):
-        klass = type.__new__(mcs, name, bases, newattrs)
+    def __new__(cls, name, bases, newattrs):
+        klass = type.__new__(cls, name, bases, newattrs)
         if name != "RequiredCondition":
             if klass.name in RegisteredConditions.conditions:
                 raise SyntaxError("already have a component registered for \"%s\"" % klass.name)
@@ -52,7 +52,7 @@ class ComponentManager:
                 self.component_classes[component_name] = component_class
 
         if override_components:
-            raise SyntaxError("unexpected components: %s" % override_components)
+            raise SyntaxError(f"unexpected components: {override_components}")
 
         for component_class in self.component_classes.values():
             self.components.add(component_class(self))
@@ -93,10 +93,7 @@ class ComponentManager:
             step = []
             to_stage = set()
             for component in set(components):
-                reqs_met = 0
-                for needed in component.depends_on:
-                    if needed in staged:
-                        reqs_met += 1
+                reqs_met = sum(1 for needed in component.depends_on if needed in staged)
                 if reqs_met == len(component.depends_on):
                     step.append(component)
                     to_stage.add(component.component_name)
@@ -114,10 +111,9 @@ class ComponentManager:
     async def start(self):
         """ Start Components in sequence sorted by requirements """
         for stage in self.sort_components():
-            needing_start = [
+            if needing_start := [
                 component._setup() for component in stage if not component.running
-            ]
-            if needing_start:
+            ]:
                 await asyncio.wait(needing_start)
         self.started.set()
 
@@ -127,10 +123,9 @@ class ComponentManager:
         """
         stages = self.sort_components(reverse=True)
         for stage in stages:
-            needing_stop = [
+            if needing_stop := [
                 component._stop() for component in stage if component.running
-            ]
-            if needing_stop:
+            ]:
                 await asyncio.wait(needing_stop)
 
     def all_components_running(self, *component_names):
@@ -142,7 +137,7 @@ class ComponentManager:
         components = {component.component_name: component for component in self.components}
         for component in component_names:
             if component not in components:
-                raise NameError("%s is not a known Component" % component)
+                raise NameError(f"{component} is not a known Component")
             if not components[component].running:
                 return False
         return True

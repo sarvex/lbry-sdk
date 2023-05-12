@@ -32,9 +32,8 @@ class _KeyBase:
             raise ValueError('invalid child number')
         if not 0 <= depth < 256:
             raise ValueError('invalid depth')
-        if parent is not None:
-            if not isinstance(parent, type(self)):
-                raise TypeError('parent key has bad type')
+        if parent is not None and not isinstance(parent, type(self)):
+            raise TypeError('parent key has bad type')
         self.ledger = ledger
         self.chain_code = chain_code
         self.n = n

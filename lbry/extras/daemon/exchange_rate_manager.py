@@ -15,11 +15,11 @@ log = logging.getLogger(__name__)
 
 class ExchangeRate:
     def __init__(self, market, spot, ts):
-        if not int(time.time()) - ts < 600:
+        if int(time.time()) - ts >= 600:
             raise ValueError('The timestamp is too dated.')
-        if not spot > 0:
+        if spot <= 0:
             raise ValueError('Spot must be greater than 0.')
-        self.currency_pair = (market[0:3], market[3:6])
+        self.currency_pair = market[:3], market[3:6]
         self.spot = spot
         self.ts = ts
 
@@ -230,13 +230,15 @@ class ExchangeRateManager:
         if from_currency == to_currency:
             return round(amount, 8)
 
-        rates = []
-        for market in self.market_feeds:
-            if (market.has_rate and market.is_online and
-                    market.rate.currency_pair == (from_currency, to_currency)):
-                rates.append(market.rate.spot)
-
-        if rates:
+        if rates := [
+            market.rate.spot
+            for market in self.market_feeds
+            if (
+                market.has_rate
+                and market.is_online
+                and market.rate.currency_pair == (from_currency, to_currency)
+            )
+        ]:
             return round(amount * Decimal(median(rates)), 8)
 
         raise CurrencyConversionError(

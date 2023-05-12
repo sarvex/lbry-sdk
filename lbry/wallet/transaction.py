@@ -163,9 +163,7 @@ class Input(InputOutput):
     @property
     def is_my_input(self) -> Optional[bool]:
         """ True if the output this input spends is yours. """
-        if self.txo_ref.txo is None:
-            return False
-        return self.txo_ref.txo.is_my_output
+        return False if self.txo_ref.txo is None else self.txo_ref.txo.is_my_output
 
     @classmethod
     def deserialize_from(cls, stream):
@@ -184,11 +182,10 @@ class Input(InputOutput):
         stream.write_uint32(self.txo_ref.position)
         if alternate_script is not None:
             stream.write_string(alternate_script)
+        elif self.is_coinbase:
+            stream.write_string(self.coinbase)
         else:
-            if self.is_coinbase:
-                stream.write_string(self.coinbase)
-            else:
-                stream.write_string(self.script.source)
+            stream.write_string(self.script.source)
         stream.write_uint32(self.sequence)
 
 
@@ -739,28 +736,31 @@ class Transaction:
         stream.write(self._raw_outputs.get_bytes())
 
     def _deserialize(self):
-        if self._raw is not None:
-            stream = BCDataStream(self._raw)
-            self.version = stream.read_uint32()
+        if self._raw is None:
+            return
+        stream = BCDataStream(self._raw)
+        self.version = stream.read_uint32()
+        input_count = stream.read_compact_size()
+        if input_count == 0:
+            self.is_segwit_flag = stream.read_uint8()
             input_count = stream.read_compact_size()
-            if input_count == 0:
-                self.is_segwit_flag = stream.read_uint8()
-                input_count = stream.read_compact_size()
-            self._add(self._inputs, [
-                Input.deserialize_from(stream) for _ in range(input_count)
-            ])
-            output_count = stream.read_compact_size()
-            self._add(self._outputs, [
-                Output.deserialize_from(stream) for _ in range(output_count)
-            ])
-            if self.is_segwit_flag:
-                # drain witness portion of transaction
-                # too many witnesses for no crime
-                self.witnesses = []
-                for _ in range(input_count):
-                    for _ in range(stream.read_compact_size()):
-                        self.witnesses.append(stream.read(stream.read_compact_size()))
-            self.locktime = stream.read_uint32()
+        self._add(self._inputs, [
+            Input.deserialize_from(stream) for _ in range(input_count)
+        ])
+        output_count = stream.read_compact_size()
+        self._add(self._outputs, [
+            Output.deserialize_from(stream) for _ in range(output_count)
+        ])
+        if self.is_segwit_flag:
+            # drain witness portion of transaction
+            # too many witnesses for no crime
+            self.witnesses = []
+            for _ in range(input_count):
+                self.witnesses.extend(
+                    stream.read(stream.read_compact_size())
+                    for _ in range(stream.read_compact_size())
+                )
+        self.locktime = stream.read_uint32()
 
     @classmethod
     def ensure_all_have_same_ledger_and_wallet(

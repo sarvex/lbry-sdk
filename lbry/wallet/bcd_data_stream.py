@@ -69,8 +69,7 @@ class BCDataStream:
     uint64 = struct.Struct('<Q')
 
     def _read_struct(self, fmt):
-        value = self.read(fmt.size)
-        if value:
+        if value := self.read(fmt.size):
             return fmt.unpack(value)[0]
 
     def read_int8(self):

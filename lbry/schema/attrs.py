@@ -40,7 +40,7 @@ def country_int_to_str(country: int) -> str:
 
 def country_str_to_int(country: str) -> int:
     if len(country) == 3:
-        country = 'R' + country
+        country = f'R{country}'
     return LocationMessage.Country.Value(country)
 
 
@@ -243,9 +243,10 @@ class Fee(Metadata):
         elif currency:
             raise Exception('In order to set a fee currency, please specify a fee amount.')
         if address:
-            if not self.currency:
+            if self.currency:
+                self.address = address
+            else:
                 raise Exception('In order to set a fee address, please specify a fee amount and currency.')
-            self.address = address
 
     @property
     def currency(self) -> str:
@@ -465,23 +466,17 @@ class Location(Metadata):
         elif isinstance(value, str):
             parts = value.split(':')
             if len(parts) > 2 or (parts[0] and parts[0][0] in ascii_letters):
-                country = parts and parts.pop(0)
-                if country:
+                if country := parts and parts.pop(0):
                     self.country = country
-                state = parts and parts.pop(0)
-                if state:
+                if state := parts and parts.pop(0):
                     self.state = state
-                city = parts and parts.pop(0)
-                if city:
+                if city := parts and parts.pop(0):
                     self.city = city
-                code = parts and parts.pop(0)
-                if code:
+                if code := parts and parts.pop(0):
                     self.code = code
-            latitude = parts and parts.pop(0)
-            if latitude:
+            if latitude := parts and parts.pop(0):
                 self.latitude = latitude
-            longitude = parts and parts.pop(0)
-            if longitude:
+            if longitude := parts and parts.pop(0):
                 self.longitude = longitude
 
         else:

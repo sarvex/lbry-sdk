@@ -35,7 +35,7 @@ def get_argument_parser():
 
 async def run_remote_command(command, **kwargs):
     async with aiohttp.ClientSession() as session:
-        async with session.post('http://localhost:7954/'+command, data=kwargs) as resp:
+        async with session.post(f'http://localhost:7954/{command}', data=kwargs) as resp:
             print(resp.status)
             print(await resp.text())
 

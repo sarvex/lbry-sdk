@@ -60,8 +60,7 @@ class BlobAnnouncer:
             while len(self.announce_queue) > 0:
                 log.info("%i blobs to announce", len(self.announce_queue))
                 await asyncio.gather(*[self._run_consumer() for _ in range(batch_size)])
-                announced = list(filter(None, self.announced))
-                if announced:
+                if announced := list(filter(None, self.announced)):
                     await self.storage.update_last_announced_blobs(announced)
                     log.info("announced %i blobs", len(announced))
                     self.announced.clear()

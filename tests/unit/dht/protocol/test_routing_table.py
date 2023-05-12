@@ -81,8 +81,9 @@ class TestRouting(AsyncioTestCase):
         peer_addresses = [
             (constants.generate_id(1), '1.2.3.1'),
         ]
-        for i in range(2, 200):
-            peer_addresses.append((constants.generate_id(i), f'1.2.3.{i}'))
+        peer_addresses.extend(
+            (constants.generate_id(i), f'1.2.3.{i}') for i in range(2, 200)
+        )
         with dht_mocks.mock_network_loop(loop):
             nodes = {
                 i: Node(loop, PeerManager(loop), node_id, 4444, 4444, 3333, address)

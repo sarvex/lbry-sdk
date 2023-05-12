@@ -61,11 +61,12 @@ class KademliaRPC:
         if not 0 < port < 65535:
             raise ValueError(f"invalid tcp port: {port}")
         rpc_contact.update_tcp_port(port)
-        if not self.verify_token(token, rpc_contact.compact_ip()):
-            if self.loop.time() - self.protocol.started_listening_time < constants.TOKEN_SECRET_REFRESH_INTERVAL:
-                pass
-            else:
-                raise ValueError("Invalid token")
+        if (
+            not self.verify_token(token, rpc_contact.compact_ip())
+            and self.loop.time() - self.protocol.started_listening_time
+            >= constants.TOKEN_SECRET_REFRESH_INTERVAL
+        ):
+            raise ValueError("Invalid token")
         self.protocol.data_store.add_peer_to_blob(
             rpc_contact, blob_hash
         )
@@ -77,13 +78,13 @@ class KademliaRPC:
             raise ValueError("invalid contact node_id length: %i" % len(key))
 
         contacts = self.protocol.routing_table.find_close_peers(key, sender_node_id=rpc_contact.node_id)
-        contact_triples = []
-        for contact in contacts[:constants.K * 2]:
-            contact_triples.append((contact.node_id, contact.address, contact.udp_port))
-        return contact_triples
+        return [
+            (contact.node_id, contact.address, contact.udp_port)
+            for contact in contacts[: constants.K * 2]
+        ]
 
     def find_value(self, rpc_contact: 'KademliaPeer', key: bytes, page: int = 0):
-        page = page if page > 0 else 0
+        page = max(page, 0)
 
         if len(key) != constants.HASH_LENGTH:
             raise ValueError("invalid blob_exchange hash length: %i" % len(key))
@@ -107,10 +108,7 @@ class KademliaRPC:
         # if we don't have k storing peers to return and we have this hash locally, include our contact information
         if len(peers) < constants.K and key.hex() in self.protocol.data_store.completed_blobs:
             peers.append(self.compact_address())
-        if not peers:
-            response[PAGE_KEY] = 0
-        else:
-            response[PAGE_KEY] = (len(peers) // (constants.K + 1)) + 1  # how many pages of peers we have for the blob
+        response[PAGE_KEY] = 0 if not peers else (len(peers) // (constants.K + 1)) + 1
         if len(peers) > constants.K:
             random.Random(self.protocol.node_id).shuffle(peers)
         if page * constants.K < len(peers):
@@ -129,10 +127,10 @@ class KademliaRPC:
     def verify_token(self, token, compact_ip):
         h = hashlib.new('sha384')
         h.update(self.token_secret + compact_ip)
-        if self.old_token_secret and not token == h.digest():  # TODO: why should we be accepting the previous token?
+        if self.old_token_secret and token != h.digest():  # TODO: why should we be accepting the previous token?
             h = hashlib.new('sha384')
             h.update(self.old_token_secret + compact_ip)
-            if not token == h.digest():
+            if token != h.digest():
                 return False
         return True
 
@@ -350,14 +348,17 @@ class KademliaProtocol(DatagramProtocol):
     @staticmethod
     def _migrate_incoming_rpc_args(peer: 'KademliaPeer', method: bytes, *args) -> typing.Tuple[typing.Tuple,
                                                                                                typing.Dict]:
-        if method == b'store' and peer.protocol_version == 0:
-            if isinstance(args[1], dict):
-                blob_hash = args[0]
-                token = args[1].pop(b'token', None)
-                port = args[1].pop(b'port', -1)
-                original_publisher_id = args[1].pop(b'lbryid', None)
-                age = 0
-                return (blob_hash, token, port, original_publisher_id, age), {}
+        if (
+            method == b'store'
+            and peer.protocol_version == 0
+            and isinstance(args[1], dict)
+        ):
+            blob_hash = args[0]
+            token = args[1].pop(b'token', None)
+            port = args[1].pop(b'port', -1)
+            original_publisher_id = args[1].pop(b'lbryid', None)
+            age = 0
+            return (blob_hash, token, port, original_publisher_id, age), {}
         return args, {}
 
     async def _add_peer(self, peer: 'KademliaPeer'):
@@ -393,7 +394,7 @@ class KademliaProtocol(DatagramProtocol):
                                                         self.node_id.hex()[:8])
         method = message.method
         if method not in [b'ping', b'store', b'findNode', b'findValue']:
-            raise AttributeError('Invalid method: %s' % message.method.decode())
+            raise AttributeError(f'Invalid method: {message.method.decode()}')
         if message.args and isinstance(message.args[-1], dict) and b'protocolVersion' in message.args[-1]:
             # args don't need reformatting
             args, kwargs = tuple(message.args[:-1]), message.args[-1]
@@ -486,10 +487,6 @@ class KademliaProtocol(DatagramProtocol):
             else:
                 log.warning("%s:%i replied, but after we cancelled the request attempt",
                             peer.address, peer.udp_port)
-        else:
-            # If the original message isn't found, it must have timed out
-            # TODO: we should probably do something with this...
-            pass
 
     def handle_error_datagram(self, address, error_datagram: ErrorDatagram):
         # The RPC request raised a remote exception; raise it locally
@@ -629,10 +626,10 @@ class KademliaProtocol(DatagramProtocol):
     def verify_token(self, token, compact_ip):
         h = constants.HASH_CLASS()
         h.update(self.token_secret + compact_ip)
-        if self.old_token_secret and not token == h.digest():  # TODO: why should we be accepting the previous token?
+        if self.old_token_secret and token != h.digest():  # TODO: why should we be accepting the previous token?
             h = constants.HASH_CLASS()
             h.update(self.old_token_secret + compact_ip)
-            if not token == h.digest():
+            if token != h.digest():
                 return False
         return True
 

@@ -89,7 +89,7 @@ class TestUsagePayment(CommandTestCase):
 
         # continue paying until account is out of funds
         with self.assertRaises(InsufficientFundsError):
-            for i in range(10):
+            for _ in range(10):
                 await asyncio.wait_for(wallet_pay_service.on_payment.first, timeout=30)
         self.assertTrue(wallet_pay_service.running)
 
@@ -133,7 +133,9 @@ class TestESSync(CommandTestCase):
         # add the new claim
         await es_writer.stop()
 
-        stream11 = self.get_claim_id(await self.stream_create(f"stream11", bid='0.001', confirm=False))
+        stream11 = self.get_claim_id(
+            await self.stream_create("stream11", bid='0.001', confirm=False)
+        )
         current_height = self.conductor.spv_node.writer.height
         generate_block_task = asyncio.create_task(self.generate(1))
         await self.conductor.spv_node.writer.wait_until_block(current_height + 1)

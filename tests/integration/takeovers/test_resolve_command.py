@@ -66,7 +66,11 @@ class BaseResolveTestCase(CommandTestCase):
         self.assertListEqual([], claim_from_es[0])
 
     async def assertNoClaim(self, name: str, claim_id: str):
-        expected = json.loads(await self.blockchain._cli_cmnd('getclaimsfornamebyid', name, '["' + claim_id + '"]'))
+        expected = json.loads(
+            await self.blockchain._cli_cmnd(
+                'getclaimsfornamebyid', name, f'["{claim_id}"]'
+            )
+        )
         if 'claims' in expected and expected['claims'] is not None:
             # ensure that if we do have the matching claim that it is not active
             self.assertEqual(expected['claims'][0]['effectiveamount'], 0)
@@ -103,7 +107,11 @@ class BaseResolveTestCase(CommandTestCase):
         self.assertEqual(claim_from_es[0][0]['claim_hash'][::-1].hex(), claim.claim_hash.hex())
         self.assertMatchESClaim(claim_from_es[0][0], claim)
 
-        expected = json.loads(await self.blockchain._cli_cmnd('getclaimsfornamebyid', name, '["' + claim_id + '"]'))
+        expected = json.loads(
+            await self.blockchain._cli_cmnd(
+                'getclaimsfornamebyid', name, f'["{claim_id}"]'
+            )
+        )
         if is_active_in_lbrycrd:
             if not expected:
                 self.assertIsNone(claim)
@@ -112,10 +120,9 @@ class BaseResolveTestCase(CommandTestCase):
             self.assertMatchDBClaim(expected['claims'][0], claim)
             self._check_supports(claim.claim_hash.hex(), expected['claims'][0].get('supports', []),
                                  claim_from_es[0][0]['support_amount'])
-        else:
-            if 'claims' in expected and expected['claims'] is not None:
-                # ensure that if we do have the matching claim that it is not active
-                self.assertEqual(expected['claims'][0]['effectiveamount'], 0)
+        elif 'claims' in expected and expected['claims'] is not None:
+            # ensure that if we do have the matching claim that it is not active
+            self.assertEqual(expected['claims'][0]['effectiveamount'], 0)
         return claim
 
     async def assertMatchClaimIsWinning(self, name, claim_id):
@@ -444,7 +451,7 @@ class ResolveCommand(BaseResolveTestCase):
         response = await self.resolve('lbry://on-channel-claim')
         self.assertFalse(response['is_channel_signature_valid'])
         self.assertEqual({'channel_id': abandoned_channel_id}, response['signing_channel'])
-        direct_uri = 'lbry://on-channel-claim#' + orphan_claim_id
+        direct_uri = f'lbry://on-channel-claim#{orphan_claim_id}'
         response = await self.resolve(direct_uri)
         self.assertFalse(response['is_channel_signature_valid'])
         self.assertEqual({'channel_id': abandoned_channel_id}, response['signing_channel'])

@@ -51,10 +51,14 @@ class BasicTransactionTests(IntegrationTestCase):
 
         # verify that a previous bug which failed to save TXIs doesn't come back
         # this check must happen before generating a new block
-        self.assertTrue(all([
-            tx.inputs[0].txo_ref.txo is not None
-            for tx in await self.ledger.db.get_transactions(txid__in=[tx.id for tx in txs])
-        ]))
+        self.assertTrue(
+            all(
+                tx.inputs[0].txo_ref.txo is not None
+                for tx in await self.ledger.db.get_transactions(
+                    txid__in=[tx.id for tx in txs]
+                )
+            )
+        )
 
         await self.generate(1)
         await asyncio.wait([self.ledger.wait(tx) for tx in txs])
@@ -261,9 +265,9 @@ class BasicTransactionTests(IntegrationTestCase):
                 return await real_broadcast(tx)
             except lbry.wallet.rpc.jsonrpc.RPCError as err:
                 # this is expected in tests where we try to double spend.
-                if 'the transaction was rejected by network rules.' in str(err):
-                    pass
-                else:
+                if 'the transaction was rejected by network rules.' not in str(
+                    err
+                ):
                     raise err
             finally:
                 e.set()

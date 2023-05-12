@@ -126,11 +126,13 @@ class UDPTrackerClientProtocol(asyncio.DatagramProtocol):
         if len(data) < 8:
             return
         transaction_id = int.from_bytes(data[4:8], byteorder="big", signed=False)
-        if transaction_id in self.data_queue:
-            if not self.data_queue[transaction_id].done():
-                if data[3] == 3:
-                    return self.data_queue[transaction_id].set_exception(Exception(decode(ErrorResponse, data).message))
-                return self.data_queue[transaction_id].set_result(data)
+        if (
+            transaction_id in self.data_queue
+            and not self.data_queue[transaction_id].done()
+        ):
+            if data[3] == 3:
+                return self.data_queue[transaction_id].set_exception(Exception(decode(ErrorResponse, data).message))
+            return self.data_queue[transaction_id].set_result(data)
         log.debug("unexpected packet (can be a response for a previously timed out request): %s", data.hex())
 
     def connection_lost(self, exc: Exception = None) -> None:
@@ -186,7 +188,11 @@ class TrackerClient:
               for info_hash in info_hashes if info_hash not in still_good_info_hashes],
             return_exceptions=True)
         if results:
-            errors = sum([1 for result in results if result is None or isinstance(result, Exception)])
+            errors = sum(
+                1
+                for result in results
+                if result is None or isinstance(result, Exception)
+            )
             log.info("Tracker: finished announcing %d files to %s:%d, %d errors", len(results), *server, errors)
 
     async def get_peer_list(self, info_hash, stopped=False, on_announcement=None, no_port=False):

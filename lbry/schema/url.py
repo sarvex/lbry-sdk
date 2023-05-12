@@ -10,21 +10,32 @@ def _create_url_regex():
         r"\u0000-\u0020\uD800-\uDFFF\uFFFE-\uFFFF]+"
 
     def _named(name, regex):
-        return "(?P<" + name + ">" + regex + ")"
+        return f"(?P<{name}>{regex})"
 
     def _group(regex):
-        return "(?:" + regex + ")"
+        return f"(?:{regex})"
 
     def _oneof(*choices):
         return _group('|'.join(choices))
 
     def _claim(name, prefix=""):
         return _group(
-            _named(name+"_name", prefix + invalid_names_regex) +
-            _oneof(
-                _group('[:#]' + _named(name+"_claim_id", "[0-9a-f]{1,40}")),
-                _group(r'\$' + _named(name+"_amount_order", '[1-9][0-9]*'))
-            ) + '?'
+            (
+                (
+                    _named(f"{name}_name", prefix + invalid_names_regex)
+                    + _oneof(
+                        _group(
+                            '[:#]'
+                            + _named(f"{name}_claim_id", "[0-9a-f]{1,40}")
+                        ),
+                        _group(
+                            r'\$'
+                            + _named(f"{name}_amount_order", '[1-9][0-9]*')
+                        ),
+                    )
+                )
+                + '?'
+            )
         )
 
     return (
@@ -99,9 +110,7 @@ class URL(NamedTuple):
     def parts(self) -> Tuple:
         if self.has_stream_in_channel:
             return self.channel, self.stream
-        if self.has_channel:
-            return self.channel,
-        return self.stream,
+        return (self.channel, ) if self.has_channel else (self.stream, )
 
     def __str__(self):
         return f"lbry://{'/'.join(str(p) for p in self.parts)}"
@@ -113,16 +122,21 @@ class URL(NamedTuple):
         if match is None:
             raise ValueError('Invalid LBRY URL')
 
-        segments = {}
         parts = match.groupdict()
-        for segment in ('channel', 'stream', 'channel_with_stream', 'stream_in_channel'):
-            if parts[f'{segment}_name'] is not None:
-                segments[segment] = PathSegment(
-                    parts[f'{segment}_name'],
-                    parts[f'{segment}_claim_id'],
-                    parts[f'{segment}_amount_order']
-                )
-
+        segments = {
+            segment: PathSegment(
+                parts[f'{segment}_name'],
+                parts[f'{segment}_claim_id'],
+                parts[f'{segment}_amount_order'],
+            )
+            for segment in (
+                'channel',
+                'stream',
+                'channel_with_stream',
+                'stream_in_channel',
+            )
+            if parts[f'{segment}_name'] is not None
+        }
         if 'channel_with_stream' in segments:
             segments['channel'] = segments['channel_with_stream']
             segments['stream'] = segments['stream_in_channel']

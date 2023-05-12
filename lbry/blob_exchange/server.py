@@ -77,21 +77,16 @@ class BlobServerProtocol(asyncio.Protocol):
         peer_address, peer_port = addr
 
         responses = []
-        address_request = request.get_address_request()
-        if address_request:
+        if address_request := request.get_address_request():
             responses.append(BlobPaymentAddressResponse(lbrycrd_address=self.lbrycrd_address))
-        availability_request = request.get_availability_request()
-        if availability_request:
+        if availability_request := request.get_availability_request():
             responses.append(BlobAvailabilityResponse(available_blobs=list(set(
                 filter(lambda blob_hash: blob_hash in self.blob_manager.completed_blob_hashes,
                        availability_request.requested_blobs)
             ))))
-        price_request = request.get_price_request()
-        if price_request:
+        if price_request := request.get_price_request():
             responses.append(BlobPriceResponse(blob_data_payment_rate='RATE_ACCEPTED'))
-        download_request = request.get_blob_request()
-
-        if download_request:
+        if download_request := request.get_blob_request():
             blob = self.blob_manager.get_blob(download_request.requested_blob)
             if blob.get_is_verified():
                 incoming_blob = {'blob_hash': blob.blob_hash, 'length': blob.length}

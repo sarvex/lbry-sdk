@@ -88,9 +88,11 @@ async def main(cmd_args=None):
                 print(response)
                 return 1
             else:
-                url_to_claim.update({
-                    claim['permanent_url']: claim for claim in response['items'] if claim['value_type'] == 'stream'
-                })
+                url_to_claim |= {
+                    claim['permanent_url']: claim
+                    for claim in response['items']
+                    if claim['value_type'] == 'stream'
+                }
             print(f'Claim search page {page} took: {time.perf_counter() - start}')
     except (ClientConnectorError, ConnectionError):
         print("Could not connect to daemon")
@@ -152,13 +154,13 @@ async def main(cmd_args=None):
                   f"99% confidence download speed:  {confidence(download_speeds, 2.626, False)}mb/s\n"
 
     for reason in ('start', 'finish'):
-        failures = [url for url, why in failed_to.items() if reason == why]
-        if failures:
+        if failures := [
+            url for url, why in failed_to.items() if reason == why
+        ]:
             result += f"\nFailed to {reason}:\n" + "\n•".join(failures)
     print(result)
 
-    webhook = os.environ.get('TTFB_SLACK_TOKEN', None)
-    if webhook:
+    if webhook := os.environ.get('TTFB_SLACK_TOKEN', None):
         await report_to_slack(result, webhook)
     return 0
 

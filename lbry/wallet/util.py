@@ -19,10 +19,7 @@ def coins_to_satoshis(coins):
 
 def satoshis_to_coins(satoshis):
     coins = '{:.8f}'.format(satoshis / COIN).rstrip('0')
-    if coins.endswith('.'):
-        return coins+'0'
-    else:
-        return coins
+    return f'{coins}0' if coins.endswith('.') else coins
 
 
 T = TypeVar('T')
@@ -92,10 +89,7 @@ class ArithUint256:
     def bits(self) -> int:
         """ Returns the position of the highest bit set plus one. """
         bits = bin(self._value)[2:]
-        for i, d in enumerate(bits):
-            if d:
-                return (len(bits) - i) + 1
-        return 0
+        return next(((len(bits) - i) + 1 for i, d in enumerate(bits) if d), 0)
 
     @property
     def low64(self) -> int:

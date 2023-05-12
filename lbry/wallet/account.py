@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 
 def validate_claim_id(claim_id):
-    if not len(claim_id) == 40:
+    if len(claim_id) != 40:
         raise Exception("Incorrect claimid length: %i" % len(claim_id))
     if isinstance(claim_id, bytes):
         claim_id = claim_id.decode('utf-8')
@@ -43,9 +43,8 @@ class DeterministicChannelKeyManager:
 
     @property
     def private_key(self):
-        if self._private_key is None:
-            if self.account.private_key is not None:
-                self._private_key = self.account.private_key.child(KeyPath.CHANNEL)
+        if self._private_key is None and self.account.private_key is not None:
+            self._private_key = self.account.private_key.child(KeyPath.CHANNEL)
         return self._private_key
 
     def maybe_generate_deterministic_key_for_channel(self, txo):
@@ -96,11 +95,9 @@ class AddressManager:
     @classmethod
     def to_dict(cls, receiving: 'AddressManager', change: 'AddressManager') -> Dict:
         d: Dict[str, Any] = {'name': cls.name}
-        receiving_dict = receiving.to_dict_instance()
-        if receiving_dict:
+        if receiving_dict := receiving.to_dict_instance():
             d['receiving'] = receiving_dict
-        change_dict = change.to_dict_instance()
-        if change_dict:
+        if change_dict := change.to_dict_instance():
             d['change'] = change_dict
         return d
 
@@ -494,10 +491,10 @@ class Account:
 
     def get_balance(self, confirmations=0, include_claims=False, read_only=False, **constraints):
         if not include_claims:
-            constraints.update({'txo_type__in': (TXO_TYPES['other'], TXO_TYPES['purchase'])})
+            constraints['txo_type__in'] = (TXO_TYPES['other'], TXO_TYPES['purchase'])
         if confirmations > 0:
             height = self.ledger.headers.height - (confirmations-1)
-            constraints.update({'height__lte': height, 'height__gt': 0})
+            constraints |= {'height__lte': height, 'height__gt': 0}
         return self.ledger.db.get_balance(accounts=[self], read_only=read_only, **constraints)
 
     async def get_max_gap(self):
@@ -568,8 +565,7 @@ class Account:
 
     async def get_channel_private_key(self, public_key_bytes) -> PrivateKey:
         channel_pubkey_hash = self.ledger.public_key_to_address(public_key_bytes)
-        private_key_pem = self.channel_keys.get(channel_pubkey_hash)
-        if private_key_pem:
+        if private_key_pem := self.channel_keys.get(channel_pubkey_hash):
             return PrivateKey.from_pem(self.ledger, private_key_pem)
         return self.deterministic_channel_keys.get_private_key_from_pubkey_hash(channel_pubkey_hash)
 
@@ -589,25 +585,26 @@ class Account:
             self.wallet.save()
 
     async def save_max_gap(self):
-        if issubclass(self.address_generator, HierarchicalDeterministic):
-            gap = await self.get_max_gap()
-            gap_changed = False
-            new_receiving_gap = max(20, gap['max_receiving_gap'] + 1)
-            if self.receiving.gap != new_receiving_gap:
-                self.receiving.gap = new_receiving_gap
-                gap_changed = True
-            new_change_gap = max(6, gap['max_change_gap'] + 1)
-            if self.change.gap != new_change_gap:
-                self.change.gap = new_change_gap
-                gap_changed = True
-            if gap_changed:
-                self.wallet.save()
+        if not issubclass(self.address_generator, HierarchicalDeterministic):
+            return
+        gap = await self.get_max_gap()
+        gap_changed = False
+        new_receiving_gap = max(20, gap['max_receiving_gap'] + 1)
+        if self.receiving.gap != new_receiving_gap:
+            self.receiving.gap = new_receiving_gap
+            gap_changed = True
+        new_change_gap = max(6, gap['max_change_gap'] + 1)
+        if self.change.gap != new_change_gap:
+            self.change.gap = new_change_gap
+            gap_changed = True
+        if gap_changed:
+            self.wallet.save()
 
     async def get_detailed_balance(self, confirmations=0, read_only=False):
         constraints = {}
         if confirmations > 0:
             height = self.ledger.headers.height - (confirmations-1)
-            constraints.update({'height__lte': height, 'height__gt': 0})
+            constraints |= {'height__lte': height, 'height__gt': 0}
         return await self.ledger.db.get_detailed_balance(
             accounts=[self], read_only=read_only, **constraints
         )

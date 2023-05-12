@@ -214,7 +214,7 @@ class BitcoinFramer(BinaryFramer):
         self._magic = magic
         self._max_block_size = max_block_size
         self._pad_command = pad_command
-        self._unpack = Struct(f'<4s12sI4s').unpack
+        self._unpack = Struct('<4s12sI4s').unpack
 
     def _checksum(self, payload):
         return double_sha256(payload)[:4]
@@ -233,7 +233,8 @@ class BitcoinFramer(BinaryFramer):
         if magic != self._magic:
             raise BadMagicError(magic, self._magic)
         command = command.rstrip(b'\0')
-        if payload_len > 1024 * 1024:
-            if command != b'block' or payload_len > self._max_block_size:
-                raise OversizedPayloadError(command, payload_len)
+        if payload_len > 1024 * 1024 and (
+            command != b'block' or payload_len > self._max_block_size
+        ):
+            raise OversizedPayloadError(command, payload_len)
         return command, payload_len, checksum

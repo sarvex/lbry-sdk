@@ -244,7 +244,7 @@ class SPVNode:
                 'index_address_status': False
             }
             if extraconf:
-                conf.update(extraconf)
+                conf |= extraconf
             self.writer = BlockchainProcessorService(
                 BlockchainEnv(db_dir=self.data_path, daemon_url=lbcwallet_node.rpc_url,
                               reorg_limit=100, max_query_workers=0, chain='regtest', index_address_status=False)
@@ -303,7 +303,7 @@ class LBCDProcess(asyncio.SubprocessProtocol):
         self.log = log.getChild('lbcd')
 
     def pipe_data_received(self, fd, data):
-        if self.log and not any(ignore in data for ignore in self.IGNORE_OUTPUT):
+        if self.log and all(ignore not in data for ignore in self.IGNORE_OUTPUT):
             if b'Error:' in data:
                 self.log.error(data.decode())
             else:
@@ -331,7 +331,7 @@ class WalletProcess(asyncio.SubprocessProtocol):
         self.transport: Optional[asyncio.transports.SubprocessTransport] = None
 
     def pipe_data_received(self, fd, data):
-        if self.log and not any(ignore in data for ignore in self.IGNORE_OUTPUT):
+        if self.log and all(ignore not in data for ignore in self.IGNORE_OUTPUT):
             if b'Error:' in data:
                 self.log.error(data.decode())
             else:
@@ -381,7 +381,7 @@ class LBCDNode:
         uname = platform.uname()
         target_os = str.lower(uname.system)
         target_arch = str.replace(uname.machine, 'x86_64', 'amd64')
-        target_platform = target_os + '_' + target_arch
+        target_platform = f'{target_os}_{target_arch}'
         self.latest_release_url = str.replace(self.latest_release_url, 'TARGET_PLATFORM', target_platform)
 
         downloaded_file = os.path.join(
@@ -460,7 +460,7 @@ class LBCDNode:
             log.exception('failed to stop lbcd', exc_info=e)
             raise
         finally:
-            self.log.info("Done shutting down " + self.daemon_bin)
+            self.log.info(f"Done shutting down {self.daemon_bin}")
             self.stopped = True
             if cleanup:
                 self.cleanup()
@@ -514,7 +514,7 @@ class LBCWalletNode:
         uname = platform.uname()
         target_os = str.lower(uname.system)
         target_arch = str.replace(uname.machine, 'x86_64', 'amd64')
-        target_platform = target_os + '_' + target_arch
+        target_platform = f'{target_os}_{target_arch}'
         self.latest_release_url = str.replace(self.latest_release_url, 'TARGET_PLATFORM', target_platform)
 
         downloaded_file = os.path.join(
@@ -593,7 +593,7 @@ class LBCWalletNode:
             log.exception('failed to stop lbcwallet', exc_info=e)
             raise
         finally:
-            self.log.info("Done shutting down " + self.lbcwallet_bin)
+            self.log.info(f"Done shutting down {self.lbcwallet_bin}")
             self.stopped = True
             if cleanup:
                 self.cleanup()

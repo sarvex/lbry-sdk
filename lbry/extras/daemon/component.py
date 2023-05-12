@@ -7,8 +7,8 @@ log = logging.getLogger(__name__)
 
 
 class ComponentType(type):
-    def __new__(mcs, name, bases, newattrs):
-        klass = type.__new__(mcs, name, bases, newattrs)
+    def __new__(cls, name, bases, newattrs):
+        klass = type.__new__(cls, name, bases, newattrs)
         if name != "Component" and newattrs['__module__'] != 'lbry.testcase':
             ComponentManager.default_component_classes[klass.component_name] = klass
         return klass

@@ -144,9 +144,7 @@ class JSONResponseEncoder(JSONEncoder):
             return obj.strftime("%Y%m%dT%H:%M:%S")
         if isinstance(obj, Decimal):
             return float(obj)
-        if isinstance(obj, bytes):
-            return obj.decode()
-        return super().default(obj)
+        return obj.decode() if isinstance(obj, bytes) else super().default(obj)
 
     def encode_transaction(self, tx):
         return {
@@ -208,13 +206,13 @@ class JSONResponseEncoder(JSONEncoder):
             output['type'] = 'payment'
 
         if txo.script.is_claim_involved:
-            output.update({
+            output |= {
                 'name': txo.claim_name,
                 'normalized_name': txo.normalized_name,
                 'claim_id': txo.claim_id,
                 'permanent_url': txo.permanent_url,
-                'meta': self.encode_claim_meta(txo.meta.copy())
-            })
+                'meta': self.encode_claim_meta(txo.meta.copy()),
+            }
             if 'short_url' in output['meta']:
                 output['short_url'] = output['meta'].pop('short_url')
             if 'canonical_url' in output['meta']:
@@ -247,9 +245,8 @@ class JSONResponseEncoder(JSONEncoder):
 
     def encode_claim_meta(self, meta):
         for key, value in meta.items():
-            if key.endswith('_amount'):
-                if isinstance(value, int):
-                    meta[key] = dewies_to_lbc(value)
+            if key.endswith('_amount') and isinstance(value, int):
+                meta[key] = dewies_to_lbc(value)
         if 0 < meta.get('creation_height', 0) <= self.ledger.headers.height:
             meta['creation_timestamp'] = self.ledger.headers.estimated_timestamp(meta['creation_height'])
         return meta
@@ -325,7 +322,7 @@ class JSONResponseEncoder(JSONEncoder):
             'uploading_to_reflector': False
         }
         if is_stream:
-            result.update({
+            result |= {
                 'streaming_url': managed_stream.stream_url,
                 'stream_hash': managed_stream.stream_hash,
                 'stream_name': managed_stream.stream_name,
@@ -338,18 +335,16 @@ class JSONResponseEncoder(JSONEncoder):
                 'blobs_remaining': managed_stream.blobs_remaining,
                 'is_fully_reflected': managed_stream.is_fully_reflected,
                 'reflector_progress': managed_stream.reflector_progress,
-                'uploading_to_reflector': managed_stream.uploading_to_reflector
-            })
+                'uploading_to_reflector': managed_stream.uploading_to_reflector,
+            }
         else:
-            result.update({
-                'streaming_url': f'file://{managed_stream.full_path}',
-            })
+            result['streaming_url'] = f'file://{managed_stream.full_path}'
         if output_exists:
-            result.update({
+            result |= {
                 'file_name': managed_stream.file_name,
                 'download_directory': managed_stream.download_directory,
                 'download_path': managed_stream.full_path,
-            })
+            }
         return result
 
     def encode_claim(self, claim):

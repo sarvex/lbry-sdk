@@ -64,7 +64,7 @@ def bencode(data: typing.Dict) -> bytes:
 def bdecode(data: bytes, allow_non_dict_return: typing.Optional[bool] = False) -> typing.Dict:
     assert isinstance(data, bytes), DecodeError(f"invalid data type: {str(type(data))}")
 
-    if len(data) == 0:
+    if not data:
         raise DecodeError('Cannot decode empty string')
     try:
         result = _bdecode(data)[0]

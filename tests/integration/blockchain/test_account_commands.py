@@ -192,7 +192,7 @@ class AccountManagement(CommandTestCase):
 
     async def test_address_validation(self):
         address = await self.daemon.jsonrpc_address_unused()
-        bad_address = address[0:20] + '9999999' + address[27:]
+        bad_address = f'{address[:20]}9999999{address[27:]}'
         with self.assertRaisesRegex(Exception, f"'{bad_address}' is not a valid address"):
             await self.daemon.jsonrpc_account_send('0.1', addresses=[bad_address])
 

@@ -184,7 +184,7 @@ class FileCommands(CommandTestCase):
         claim_id = self.get_claim_id(tx)
 
         # Assert that file list and source contains the local unsanitized name, but suggested name is sanitized
-        full_path = (await self.daemon.jsonrpc_get('lbry://' + claim_name)).full_path
+        full_path = (await self.daemon.jsonrpc_get(f'lbry://{claim_name}')).full_path
         stream_file_name = os.path.basename(full_path)
         source_file_name = tx['outputs'][0]['value']['source']['name']
         file_list_name = stream.file_name
@@ -198,7 +198,9 @@ class FileCommands(CommandTestCase):
         await self._purge_file(claim_name, full_path)
 
         # Re-download deleted file and assert that the file name is sanitized
-        full_path = (await self.daemon.jsonrpc_get('lbry://' + claim_name, save_file=True)).full_path
+        full_path = (
+            await self.daemon.jsonrpc_get(f'lbry://{claim_name}', save_file=True)
+        ).full_path
         stream_file_name = os.path.basename(full_path)
         stream = (await self.daemon.jsonrpc_file_list())["items"][0]
         file_list_name = stream.file_name
@@ -212,8 +214,11 @@ class FileCommands(CommandTestCase):
 
         # Assert that the downloaded file name is not sanitized when user provides custom file name
         custom_name = 'cust*m_name'
-        full_path = (await self.daemon.jsonrpc_get(
-            'lbry://' + claim_name, file_name=custom_name, save_file=True)).full_path
+        full_path = (
+            await self.daemon.jsonrpc_get(
+                f'lbry://{claim_name}', file_name=custom_name, save_file=True
+            )
+        ).full_path
         file_name_on_disk = os.path.basename(full_path)
         self.assertTrue(os.path.isfile(full_path))
         self.assertEqual(custom_name, file_name_on_disk)
@@ -222,7 +227,9 @@ class FileCommands(CommandTestCase):
         prefix, suffix = 'derpyderp?', '.ext.'
         san_prefix, san_suffix = 'derpyderp', '.ext'
         tx = await self.stream_update(claim_id, data=b'amazing content', prefix=prefix, suffix=suffix)
-        full_path = (await self.daemon.jsonrpc_get('lbry://' + claim_name, save_file=True)).full_path
+        full_path = (
+            await self.daemon.jsonrpc_get(f'lbry://{claim_name}', save_file=True)
+        ).full_path
         updated_stream = (await self.daemon.jsonrpc_file_list())["items"][0]
 
         stream_file_name = os.path.basename(full_path)
@@ -335,12 +342,17 @@ class FileCommands(CommandTestCase):
         await self.server.blob_manager.delete_blobs(all_except_sd)
         resp = await self.daemon.jsonrpc_get('lbry://foo', timeout=2, save_file=True)
         self.assertIn('error', resp)
-        self.assertEqual('Failed to download data blobs for sd hash %s within timeout.' % sd_hash, resp['error'])
+        self.assertEqual(
+            f'Failed to download data blobs for sd hash {sd_hash} within timeout.',
+            resp['error'],
+        )
         self.assertTrue(await self.daemon.jsonrpc_file_delete(claim_name='foo'), "data timeout didn't create a file")
         await self.server.blob_manager.delete_blobs([sd_hash])
         resp = await self.daemon.jsonrpc_get('lbry://foo', timeout=2, save_file=True)
         self.assertIn('error', resp)
-        self.assertEqual('Failed to download sd blob %s within timeout.' % sd_hash, resp['error'])
+        self.assertEqual(
+            f'Failed to download sd blob {sd_hash} within timeout.', resp['error']
+        )
 
     async def wait_files_to_complete(self):
         while await self.file_list(status='running'):
@@ -401,7 +413,7 @@ class FileCommands(CommandTestCase):
         # backup server blobs
         for blob_hash in all_except_sd_and_head:
             blob = self.server_blob_manager.get_blob(blob_hash)
-            os.rename(blob.file_path, blob.file_path + '__')
+            os.rename(blob.file_path, f'{blob.file_path}__')
 
         # erase all except sd blob
         await self.server.blob_manager.delete_blobs(all_except_sd_and_head)
@@ -415,7 +427,7 @@ class FileCommands(CommandTestCase):
         # recover blobs
         for blob_hash in all_except_sd_and_head:
             blob = self.server_blob_manager.get_blob(blob_hash)
-            os.rename(blob.file_path + '__', blob.file_path)
+            os.rename(f'{blob.file_path}__', blob.file_path)
             self.server_blob_manager.blobs.clear()
             await self.server_blob_manager.blob_completed(self.server_blob_manager.get_blob(blob_hash))
 

@@ -19,8 +19,8 @@ log = logging.getLogger(__name__)
 class VideoFileAnalyzer:
 
     def _replace_or_pop_env(self, variable):
-        if variable + '_ORIG' in self._env_copy:
-            self._env_copy[variable] = self._env_copy[variable + '_ORIG']
+        if f'{variable}_ORIG' in self._env_copy:
+            self._env_copy[variable] = self._env_copy[f'{variable}_ORIG']
         else:
             self._env_copy.pop(variable, None)
 
@@ -53,11 +53,11 @@ class VideoFileAnalyzer:
     # The recommended fix is switching to ProactorEventLoop, but that breaks UDP in Linux Python 3.7.
     # We work around that issue here by using run_in_executor. Check it again in Python 3.8.
     async def _execute_ffmpeg(self, arguments):
-        arguments = self._which_ffmpeg + " " + arguments
+        arguments = f"{self._which_ffmpeg} {arguments}"
         return await asyncio.get_event_loop().run_in_executor(None, self._execute, arguments, self._env_copy)
 
     async def _execute_ffprobe(self, arguments):
-        arguments = self._which_ffprobe + " " + arguments
+        arguments = f"{self._which_ffprobe} {arguments}"
         return await asyncio.get_event_loop().run_in_executor(None, self._execute, arguments, self._env_copy)
 
     async def _verify_executables(self):
@@ -185,7 +185,7 @@ class VideoFileAnalyzer:
 
         result, _ = await self._execute_ffprobe(f'-v debug "{video_file}"')
         match = re.search(r"Before avformat_find_stream_info.+?\s+seeks:(\d+)\s+", result)
-        if match and int(match.group(1)) != 0:
+        if match and int(match[1]) != 0:
             return "Video stream descriptors are not at the start of the file (the faststart flag was not used)."
         return ""
 
@@ -216,15 +216,17 @@ class VideoFileAnalyzer:
         result, _ = await self._execute_ffmpeg(f'-i "{video_file}" -t {seconds} '
                                                f'-af volumedetect -vn -sn -dn -f null "{os.devnull}"')
         try:
-            mean_volume = float(re.search(r"mean_volume:\s+([-+]?\d*\.\d+|\d+)", result).group(1))
-            max_volume = float(re.search(r"max_volume:\s+([-+]?\d*\.\d+|\d+)", result).group(1))
+            mean_volume = float(
+                re.search(r"mean_volume:\s+([-+]?\d*\.\d+|\d+)", result)[1]
+            )
+            max_volume = float(re.search(r"max_volume:\s+([-+]?\d*\.\d+|\d+)", result)[1])
         except Exception as e:
             log.debug("   Failure in volume analysis. Message: %s", str(e))
             return ""
 
         if max_volume < -5.0 and mean_volume < -22.0:
             return "Audio is at least five dB lower than prime. " \
-                   f"Actual max: {max_volume}, mean: {mean_volume}"
+                       f"Actual max: {max_volume}, mean: {mean_volume}"
 
         log.debug("   Detected audio volume has mean, max of %f, %f dB", mean_volume, max_volume)
 
@@ -286,17 +288,18 @@ class VideoFileAnalyzer:
             self._available_encoders, _ = await self._execute_ffmpeg("-encoders -v quiet")
 
         encoder = self._conf.audio_encoder.split(" ", 1)[0]
-        if wants_opus and 'opus' in encoder:
-            return self._conf.audio_encoder
+        if wants_opus:
+            if 'opus' in encoder:
+                return self._conf.audio_encoder
 
-        if wants_opus and re.search(r"^\s*A..... libopus ", self._available_encoders, re.MULTILINE):
-            return "libopus -b:a 160k"
+            if re.search(r"^\s*A..... libopus ", self._available_encoders, re.MULTILINE):
+                return "libopus -b:a 160k"
 
-        if wants_opus and 'vorbis' in encoder:
-            return self._conf.audio_encoder
+            if 'vorbis' in encoder:
+                return self._conf.audio_encoder
 
-        if wants_opus and re.search(r"^\s*A..... libvorbis ", self._available_encoders, re.MULTILINE):
-            return "libvorbis -q:a 6"
+            if re.search(r"^\s*A..... libvorbis ", self._available_encoders, re.MULTILINE):
+                return "libvorbis -q:a 6"
 
         if re.search(fr"^\s*A..... {encoder} ", self._available_encoders, re.MULTILINE):
             return self._conf.audio_encoder

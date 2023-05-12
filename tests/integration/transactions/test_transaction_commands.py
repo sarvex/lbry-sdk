@@ -30,7 +30,7 @@ class TransactionCommandsTestCase(CommandTestCase):
         change_address = await self.blockchain.get_raw_change_address()
         sendtxid = await self.blockchain.send_to_address(change_address, 10)
         # After a few tries, Hub should have the transaction (in mempool).
-        for i in range(5):
+        for _ in range(5):
             tx = await self.daemon.jsonrpc_transaction_show(sendtxid)
             # Retry if Hub is not aware of the transaction.
             if isinstance(tx, dict):

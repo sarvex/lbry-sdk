@@ -48,10 +48,14 @@ class Setting(Generic[T]):
     def __get__(self, obj: Optional['BaseConfig'], owner) -> T:
         if obj is None:
             return self
-        for location in obj.search_order:
-            if self.name in location:
-                return location[self.name]
-        return self.default
+        return next(
+            (
+                location[self.name]
+                for location in obj.search_order
+                if self.name in location
+            ),
+            self.default,
+        )
 
     def __set__(self, obj: 'BaseConfig', val: Union[T, NOT_SET]):
         if val == NOT_SET:
@@ -64,16 +68,17 @@ class Setting(Generic[T]):
                 location[self.name] = val
 
     def is_set(self, obj: 'BaseConfig') -> bool:
-        for location in obj.search_order:
-            if self.name in location:
-                return True
-        return False
+        return any(self.name in location for location in obj.search_order)
 
     def is_set_to_default(self, obj: 'BaseConfig') -> bool:
-        for location in obj.search_order:
-            if self.name in location:
-                return location[self.name] == self.default
-        return False
+        return next(
+            (
+                location[self.name] == self.default
+                for location in obj.search_order
+                if self.name in location
+            ),
+            False,
+        )
 
     def validate(self, value):
         raise NotImplementedError()
@@ -269,9 +274,7 @@ class Servers(ListSetting):
         return servers
 
     def serialize(self, value):
-        if value:
-            return [f"{host}:{port}" for host, port in value]
-        return value
+        return [f"{host}:{port}" for host, port in value] if value else value
 
 
 class Strings(ListSetting):
@@ -818,7 +821,11 @@ def get_linux_directories() -> Tuple[str, str, str]:
         with open(os.path.join(user_config_dir(), 'user-dirs.dirs'), 'r') as xdg:
             down_dir = re.search(r'XDG_DOWNLOAD_DIR=(.+)', xdg.read())
         if down_dir:
-            down_dir = re.sub(r'\$HOME', os.getenv('HOME') or os.path.expanduser("~/"), down_dir.group(1))
+            down_dir = re.sub(
+                r'\$HOME',
+                os.getenv('HOME') or os.path.expanduser("~/"),
+                down_dir[1],
+            )
             download_dir = re.sub('\"', '', down_dir)
     except OSError:
         download_dir = os.getenv('XDG_DOWNLOAD_DIR')

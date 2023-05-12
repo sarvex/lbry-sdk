@@ -65,7 +65,7 @@ async def main(host: str, port: int, db_file_path: str, bootstrap_node: Optional
     loop = asyncio.get_event_loop()
     conf = Config()
     if not db_file_path.startswith(':memory:'):
-        node_id_file_path = db_file_path + 'node_id'
+        node_id_file_path = f'{db_file_path}node_id'
         if os.path.exists(node_id_file_path):
             with open(node_id_file_path, 'rb') as node_id_file:
                 node_id = node_id_file.read()

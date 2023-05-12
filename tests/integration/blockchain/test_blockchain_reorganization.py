@@ -68,7 +68,7 @@ class BlockchainReorganizationTests(CommandTestCase):
         claim_id = still_valid.outputs[0].claim_id
         c1 = (await self.resolve(f'still-valid#{claim_id}'))['claim_id']
         c2 = (await self.resolve(f'still-valid#{claim_id[:2]}'))['claim_id']
-        c3 = (await self.resolve(f'still-valid'))['claim_id']
+        c3 = (await self.resolve('still-valid'))['claim_id']
         self.assertTrue(c1 == c2 == c3)
 
         abandon_tx = await self.daemon.jsonrpc_stream_abandon(claim_id=claim_id)
@@ -76,7 +76,7 @@ class BlockchainReorganizationTests(CommandTestCase):
         await asyncio.wait_for(self.on_header(213), 1.0)
         c1 = await self.resolve(f'still-valid#{still_valid.outputs[0].claim_id}')
         c2 = await self.daemon.jsonrpc_resolve([f'still-valid#{claim_id[:2]}'])
-        c3 = await self.daemon.jsonrpc_resolve([f'still-valid'])
+        c3 = await self.daemon.jsonrpc_resolve(['still-valid'])
 
     async def test_reorg_change_claim_height(self):
         # sanity check

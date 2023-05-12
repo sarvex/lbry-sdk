@@ -72,9 +72,8 @@ class LedgerTestCase(AsyncioTestCase):
             'prev_block_hash': b'0000000000000000000000000000000000000000000000000000000000000000',
             'timestamp': 1231006505,
             'claim_trie_root': b'4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b',
-            'version': 1
-        }
-        header.update(kwargs)
+            'version': 1,
+        } | kwargs
         header['merkle_root'] = header['merkle_root'].ljust(64, b'a')
         header['prev_block_hash'] = header['prev_block_hash'].ljust(64, b'0')
         return self.ledger.headers.serialize(header)

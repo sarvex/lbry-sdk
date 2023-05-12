@@ -130,7 +130,7 @@ class TestKBucket(AsyncioTestCase):
 
         added = []
         # Add couple contacts
-        for i in range(constants.K - 2):
+        for _ in range(constants.K - 2):
             peer = make_kademlia_peer(generate_id(), next(self.address_generator), 4444)
             self.assertTrue(self.kbucket.add_peer(peer))
             added.append(peer)

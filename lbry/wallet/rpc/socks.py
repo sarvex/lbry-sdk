@@ -210,8 +210,7 @@ class SOCKS5(SOCKSBase):
 
     def _start(self):
         self._state = self._first_response
-        return (b'\5' + bytes([len(self._auth_methods)])
-                + bytes(m for m in self._auth_methods))
+        return (b'\5' + bytes([len(self._auth_methods)]) + bytes(self._auth_methods))
 
     def _first_response(self):
         # Wait for 2-byte response

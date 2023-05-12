@@ -105,16 +105,22 @@ class PeerManager:
 
     def prune(self):  # TODO: periodically call this
         now = self._loop.time()
-        to_pop = []
-        for (address, udp_port), (_, last_failure) in self._rpc_failures.items():
-            if last_failure and last_failure < now - constants.RPC_ATTEMPTS_PRUNING_WINDOW:
-                to_pop.append((address, udp_port))
+        to_pop = [
+            (address, udp_port)
+            for (address, udp_port), (
+                _,
+                last_failure,
+            ) in self._rpc_failures.items()
+            if last_failure
+            and last_failure < now - constants.RPC_ATTEMPTS_PRUNING_WINDOW
+        ]
         while to_pop:
             del self._rpc_failures[to_pop.pop()]
-        to_pop = []
-        for node_id, (age, token) in self._node_tokens.items():  # pylint: disable=unused-variable
-            if age < now - constants.TOKEN_SECRET_REFRESH_INTERVAL:
-                to_pop.append(node_id)
+        to_pop = [
+            node_id
+            for node_id, (age, token) in self._node_tokens.items()
+            if age < now - constants.TOKEN_SECRET_REFRESH_INTERVAL
+        ]
         while to_pop:
             del self._node_tokens[to_pop.pop()]
 
@@ -169,9 +175,11 @@ class KademliaPeer:
     allow_localhost: bool = field(default=False, compare=False, hash=False)
 
     def __post_init__(self):
-        if self._node_id is not None:
-            if not len(self._node_id) == constants.HASH_LENGTH:
-                raise ValueError("invalid node_id: {}".format(self._node_id.hex()))
+        if (
+            self._node_id is not None
+            and len(self._node_id) != constants.HASH_LENGTH
+        ):
+            raise ValueError(f"invalid node_id: {self._node_id.hex()}")
         if self.udp_port is not None and not 1024 <= self.udp_port <= 65535:
             raise ValueError(f"invalid udp port: {self.address}:{self.udp_port}")
         if self.tcp_port is not None and not 1024 <= self.tcp_port <= 65535:

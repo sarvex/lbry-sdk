@@ -59,10 +59,9 @@ async def file_reader(file_path: str):
         bytes_to_read = min((length - offset), MAX_BLOB_SIZE - 1)
         if not bytes_to_read:
             break
-        blob_bytes = await asyncio.get_event_loop().run_in_executor(
+        yield await asyncio.get_event_loop().run_in_executor(
             None, read_bytes, file_path, offset, bytes_to_read
         )
-        yield blob_bytes
         offset += bytes_to_read
 
 
@@ -159,10 +158,7 @@ class StreamDescriptor:
             added_on: float = None, is_mine: bool = False
         ):
         sd_hash = self.calculate_sd_hash() if not old_sort else self.calculate_old_sort_sd_hash()
-        if not old_sort:
-            sd_data = self.as_json()
-        else:
-            sd_data = self.old_sort_json()
+        sd_data = self.as_json() if not old_sort else self.old_sort_json()
         sd_blob = blob_file_obj or BlobFile(
             self.loop, sd_hash, len(sd_data), blob_completed_callback, self.blob_dir, added_on, is_mine
         )
@@ -219,10 +215,7 @@ class StreamDescriptor:
     @staticmethod
     def get_blob_hashsum(blob_dict: typing.Dict):
         length = blob_dict['length']
-        if length != 0:
-            blob_hash = blob_dict['blob_hash']
-        else:
-            blob_hash = None
+        blob_hash = blob_dict['blob_hash'] if length != 0 else None
         blob_num = blob_dict['blob_num']
         iv = blob_dict['iv']
         blob_hashsum = get_lbry_hash_obj()

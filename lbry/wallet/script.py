@@ -110,11 +110,14 @@ class Token(namedtuple('Token', 'value')):
     __slots__ = ()
 
     def __repr__(self):
-        name = None
-        for var_name, var_value in globals().items():
-            if var_name.startswith('OP_') and var_value == self.value:
-                name = var_name
-                break
+        name = next(
+            (
+                var_name
+                for var_name, var_value in globals().items()
+                if var_name.startswith('OP_') and var_value == self.value
+            ),
+            None,
+        )
         return name or self.value
 
 
@@ -183,9 +186,7 @@ class Parser:
                     self.values[opcode.name] = token.value
                 else:
                     raise ParseError(f"SmallIntegerToken found but opcode was '{opcode}'.")
-            elif token.value == opcode:
-                pass
-            else:
+            elif token.value != opcode:
                 raise ParseError(f"Token is '{token.value}' and opcode is '{opcode}'.")
             self.token_index += 1
             self.opcode_index += 1

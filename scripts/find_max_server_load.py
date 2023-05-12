@@ -76,7 +76,7 @@ async def main(host, port):
     await smiths.make_one_more_of_them()
     activity = asyncio.create_task(smiths.coordinate_nefarious_activity())
     ease_off = 0
-    for i in range(1000):
+    for _ in range(1000):
         await asyncio.sleep(1)
         if activity.done() and activity.result() < .9:
             print('more, more, more...')

@@ -26,7 +26,7 @@ async def listen(slack_client, url):
                     username=url,
                     icon_emoji=":hourglass_flowing_sand:",
                     channel='#clubhouse-de-obscure',
-                    text="*Query timed out:* " + clean
+                    text=f"*Query timed out:* {clean}",
                 )
                 if not response["ok"]:
                     print("SLACK ERROR:\n", response)
@@ -41,9 +41,12 @@ async def main():
         return
 
     num_servers = 5
-    tasks = []
-    for i in range(1, num_servers+1):
-        tasks.append(asyncio.create_task(listen(slack_client, f'http://spv{i}.lbry.com:50005')))
+    tasks = [
+        asyncio.create_task(
+            listen(slack_client, f'http://spv{i}.lbry.com:50005')
+        )
+        for i in range(1, num_servers + 1)
+    ]
     await asyncio.gather(*tasks)
 
 asyncio.run(main())

@@ -61,8 +61,12 @@ def get_test_daemon(conf: Config, with_fee=False):
         "ver": "0.0.3"
     }
     if with_fee:
-        metadata.update(
-            {"fee": {"USD": {"address": "bQ6BGboPV2SpTMEP7wLNiAcnsZiH8ye6eA", "amount": 0.75}}})
+        metadata["fee"] = {
+            "USD": {
+                "address": "bQ6BGboPV2SpTMEP7wLNiAcnsZiH8ye6eA",
+                "amount": 0.75,
+            }
+        }
     migrated = smart_decode(json.dumps(metadata))
     daemon._resolve = daemon.resolve = lambda *_: defer.succeed(
         {"test": {'claim': {'value': migrated.claim_dict}}})

@@ -84,9 +84,11 @@ class Node:
                 await fut
                 continue
 
-            # ping the set of peers; upon success/failure the routing able and last replied/failed time will be updated
-            to_ping = [peer for peer in set(total_peers) if self.protocol.peer_manager.peer_is_good(peer) is not True]
-            if to_ping:
+            if to_ping := [
+                peer
+                for peer in set(total_peers)
+                if self.protocol.peer_manager.peer_is_good(peer) is not True
+            ]:
                 self.protocol.ping_queue.enqueue_maybe_ping(*to_ping, delay=0)
             if self._storage:
                 await self._storage.save_kademlia_peers(self.protocol.routing_table.get_peers())
@@ -125,7 +127,11 @@ class Node:
             self.joined.clear()
         if self._join_task:
             self._join_task.cancel()
-        if self._refresh_task and not (self._refresh_task.done() or self._refresh_task.cancelled()):
+        if (
+            self._refresh_task
+            and not self._refresh_task.done()
+            and not self._refresh_task.cancelled()
+        ):
             self._refresh_task.cancel()
         if self.protocol and self.protocol.ping_queue.running:
             self.protocol.ping_queue.stop()
@@ -277,6 +283,9 @@ class Node:
 
 async def get_kademlia_peers_from_hosts(peer_list: typing.List[typing.Tuple[str, int]]) -> typing.List['KademliaPeer']:
     peer_address_list = [(await resolve_host(url, port, proto='tcp'), port) for url, port in peer_list]
-    kademlia_peer_list = [make_kademlia_peer(None, address, None, tcp_port=port, allow_localhost=True)
-                          for address, port in peer_address_list]
-    return kademlia_peer_list
+    return [
+        make_kademlia_peer(
+            None, address, None, tcp_port=port, allow_localhost=True
+        )
+        for address, port in peer_address_list
+    ]

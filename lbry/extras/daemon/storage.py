@@ -23,7 +23,8 @@ log = logging.getLogger(__name__)
 
 def calculate_effective_amount(amount: str, supports: typing.Optional[typing.List[typing.Dict]] = None) -> str:
     return dewies_to_lbc(
-        lbc_to_dewies(amount) + sum([lbc_to_dewies(support['amount']) for support in supports])
+        lbc_to_dewies(amount)
+        + sum(lbc_to_dewies(support['amount']) for support in supports)
     )
 
 
@@ -71,10 +72,10 @@ class StoredContentClaim:
 
 def _get_content_claims(transaction: sqlite3.Connection, query: str,
                         source_hashes: typing.List[str]) -> typing.Dict[str, StoredContentClaim]:
-    claims = {}
-    for claim_info in _batched_select(transaction, query, source_hashes):
-        claims[claim_info[0]] = StoredContentClaim(*claim_info[1:])
-    return claims
+    return {
+        claim_info[0]: StoredContentClaim(*claim_info[1:])
+        for claim_info in _batched_select(transaction, query, source_hashes)
+    }
 
 
 def get_claims_from_stream_hashes(transaction: sqlite3.Connection,
@@ -106,7 +107,7 @@ def get_claims_from_torrent_info_hashes(transaction: sqlite3.Connection,
 def _batched_select(transaction, query, parameters, batch_size=900):
     for start_index in range(0, len(parameters), batch_size):
         current_batch = parameters[start_index:start_index+batch_size]
-        bind = "({})".format(','.join(['?'] * len(current_batch)))
+        bind = f"({','.join(['?'] * len(current_batch))})"
         yield from transaction.execute(query.format(bind), current_batch)
 
 
@@ -214,11 +215,11 @@ def delete_torrent(transaction: sqlite3.Connection, bt_infohash: str):
 def store_file(transaction: sqlite3.Connection, stream_hash: str, file_name: typing.Optional[str],
                download_directory: typing.Optional[str], data_payment_rate: float, status: str,
                content_fee: typing.Optional[Transaction], added_on: typing.Optional[int] = None) -> int:
-    if not file_name and not download_directory:
-        encoded_file_name, encoded_download_dir = None, None
-    else:
+    if file_name or download_directory:
         encoded_file_name = binascii.hexlify(file_name.encode()).decode()
         encoded_download_dir = binascii.hexlify(download_directory.encode()).decode()
+    else:
+        encoded_file_name, encoded_download_dir = None, None
     time_added = added_on or int(time.time())
     transaction.execute(
         "insert or replace into file values (?, NULL, ?, ?, ?, ?, ?, ?, ?)",
@@ -349,9 +350,7 @@ class SQLiteStorage(SQLiteMixin):
 
     async def run_and_return_one_or_none(self, query, *args):
         for row in await self.db.execute_fetchall(query, args):
-            if len(row) == 1:
-                return row[0]
-            return row
+            return row[0] if len(row) == 1 else row
 
     async def run_and_return_list(self, query, *args):
         rows = list(await self.db.execute_fetchall(query, args))
@@ -404,12 +403,14 @@ class SQLiteStorage(SQLiteMixin):
                 if immediate:
                     transaction.execute(
                         "update blob set single_announce=1, next_announce_time=? "
-                        "where blob_hash=? and status='finished'", (int(now), blob_hash)
+                        "where blob_hash=? and status='finished'",
+                        (now, blob_hash),
                     ).fetchall()
                 else:
                     transaction.execute(
                         "update blob set single_announce=1 where blob_hash=? and status='finished'", (blob_hash,)
                     ).fetchall()
+
         return self.db.run(set_single_announce)
 
     def get_blobs_to_announce(self):
@@ -847,11 +848,10 @@ class SQLiteStorage(SQLiteMixin):
         if known_sd_hash[0] != claim.stream.source.sd_hash:
             raise Exception("stream mismatch")
 
-        # if there is a current claim associated to the file, check that the new claim is an update to it
-        current_associated_content = transaction.execute(
-            "select claim_outpoint from content_claim where stream_hash=?", (stream_hash,)
-        ).fetchone()
-        if current_associated_content:
+        if current_associated_content := transaction.execute(
+            "select claim_outpoint from content_claim where stream_hash=?",
+            (stream_hash,),
+        ).fetchone():
             current_associated_claim_id = transaction.execute(
                 "select claim_id from claim where claim_outpoint=?", current_associated_content
             ).fetchone()[0]

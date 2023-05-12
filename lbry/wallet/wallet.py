@@ -200,11 +200,14 @@ class Wallet:
             ledger = manager.get_or_create_ledger(account_dict['ledger'])
             _, _, pubkey = Account.keys_from_dict(ledger, account_dict)
             account_id = pubkey.address
-            local_match = None
-            for local_account in self.accounts:
-                if account_id == local_account.id:
-                    local_match = local_account
-                    break
+            local_match = next(
+                (
+                    local_account
+                    for local_account in self.accounts
+                    if account_id == local_account.id
+                ),
+                None,
+            )
             if local_match is not None:
                 local_match.merge(account_dict)
                 merged_accounts.append(local_match)
@@ -215,10 +218,7 @@ class Wallet:
 
     @property
     def is_locked(self) -> bool:
-        for account in self.accounts:
-            if account.encrypted:
-                return True
-        return False
+        return any(account.encrypted for account in self.accounts)
 
     async def unlock(self, password):
         for account in self.accounts:
@@ -273,23 +273,21 @@ class WalletStorage:
         }
 
     def read(self):
-        if self.path and os.path.exists(self.path):
-            with open(self.path, 'r') as f:
-                json_data = f.read()
-                json_dict = json.loads(json_data)
-                if json_dict.get('version') == self.LATEST_VERSION and \
-                        set(json_dict) == set(self._default):
-                    return json_dict
-                else:
-                    return self.upgrade(json_dict)
-        else:
+        if not self.path or not os.path.exists(self.path):
             return self._default.copy()
+        with open(self.path, 'r') as f:
+            json_data = f.read()
+            json_dict = json.loads(json_data)
+            return (
+                json_dict
+                if json_dict.get('version') == self.LATEST_VERSION
+                and set(json_dict) == set(self._default)
+                else self.upgrade(json_dict)
+            )
 
     def upgrade(self, json_dict):
         json_dict = json_dict.copy()
         version = json_dict.pop('version', -1)
-        if version == -1:
-            pass
         upgraded = self._default.copy()
         upgraded.update(json_dict)
         return json_dict
@@ -300,7 +298,7 @@ class WalletStorage:
         if self.path is None:
             return json_data
 
-        temp_path = "{}.tmp.{}".format(self.path, os.getpid())
+        temp_path = f"{self.path}.tmp.{os.getpid()}"
         with open(temp_path, "w") as f:
             f.write(json_data)
             f.flush()

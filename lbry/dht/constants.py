@@ -30,10 +30,7 @@ def digest(data: bytes) -> bytes:
 
 
 def generate_id(num=None) -> bytes:
-    if num is not None:
-        return digest(str(num).encode())
-    else:
-        return digest(os.urandom(32))
+    return digest(str(num).encode()) if num is not None else digest(os.urandom(32))
 
 
 def generate_rpc_id(num=None) -> bytes:

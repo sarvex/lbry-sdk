@@ -391,7 +391,7 @@ class WalletEncryptionAndSynchronization(CommandTestCase):
         # Need to use new password2 in sync_apply. Attempts with other passwords
         # should fail consistently with InvalidPasswordError.
         random = Random('password')
-        for i in range(200):
+        for _ in range(200):
             bad_guess = ''.join(random.choices(string.digits + string.ascii_letters + string.punctuation, k=40))
             self.assertNotEqual(bad_guess, 'password2')
             with self.assertRaises(InvalidPasswordError):

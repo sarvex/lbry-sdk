@@ -53,7 +53,7 @@ def run_read_only_fetchall(sql, params):
     cursor = reader_context.get().cursor
     try:
         return cursor.execute(sql, params).fetchall()
-    except (Exception, OSError) as e:
+    except Exception as e:
         log.exception('Error running transaction:', exc_info=e)
         raise
 
@@ -62,7 +62,7 @@ def run_read_only_fetchone(sql, params):
     cursor = reader_context.get().cursor
     try:
         return cursor.execute(sql, params).fetchone()
-    except (Exception, OSError) as e:
+    except Exception as e:
         log.exception('Error running transaction:', exc_info=e)
         raise
 
@@ -223,7 +223,7 @@ class AIOSQLite:
             result = fun(self.writer_connection, *args, **kwargs)  # type: ignore
             self.writer_connection.commit()
             return result
-        except (Exception, OSError) as e:
+        except Exception as e:
             log.exception('Error running transaction:', exc_info=e)
             self.writer_connection.rollback()
             log.warning("rolled back")
@@ -326,7 +326,7 @@ def constraints_to_sql(constraints, joiner=' AND ', prepend_key=''):
         elif key.endswith('__any') or key.endswith('__or'):
             where, subvalues = constraints_to_sql(constraint, ' OR ', key+tag+'_')
             sql.append(f'({where})')
-            values.update(subvalues)
+            values |= subvalues
             continue
         if key.endswith('__and'):
             where, subvalues = constraints_to_sql(constraint, ' AND ', key+tag+'_')
@@ -345,8 +345,7 @@ def query(select, **constraints) -> Tuple[str, Dict[str, Any]]:
     order_by = constraints.pop('order_by', None)
     group_by = constraints.pop('group_by', None)
 
-    accounts = constraints.pop('accounts', [])
-    if accounts:
+    if accounts := constraints.pop('accounts', []):
         constraints['account__in'] = [a.public_key.address for a in accounts]
 
     where, values = constraints_to_sql(constraints)
@@ -473,9 +472,7 @@ class SQLiteMixin:
             policy = " OR IGNORE"
         if replace:
             policy = " OR REPLACE"
-        sql = "INSERT{} INTO {} ({}) VALUES ({})".format(
-            policy, table, ', '.join(columns), ', '.join(['?'] * len(values))
-        )
+        sql = f"INSERT{policy} INTO {table} ({', '.join(columns)}) VALUES ({', '.join(['?'] * len(values))})"
         return sql, values
 
     @staticmethod
@@ -486,17 +483,12 @@ class SQLiteMixin:
             columns.append(f"{column} = ?")
             values.append(value)
         values.extend(constraints)
-        sql = "UPDATE {} SET {} WHERE {}".format(
-            table, ', '.join(columns), where
-        )
+        sql = f"UPDATE {table} SET {', '.join(columns)} WHERE {where}"
         return sql, values
 
 
 def dict_row_factory(cursor, row):
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = row[idx]
-    return d
+    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
 
 SQLITE_MAX_INTEGER = 9223372036854775807
@@ -506,7 +498,6 @@ def _get_spendable_utxos(transaction: sqlite3.Connection, accounts: List, decode
                          result: Dict[Tuple[bytes, int, bool], List[int]], reserved: List[Transaction],
                          amount_to_reserve: int, reserved_amount: int, floor: int, ceiling: int,
                          fee_per_byte: int) -> int:
-    accounts_fmt = ",".join(["?"] * len(accounts))
     txo_query = """
         SELECT tx.txid, txo.txoid, tx.raw, tx.height, txo.position as nout, tx.is_verified, txo.amount FROM txo
         INNER JOIN account_address USING (address)
@@ -516,8 +507,9 @@ def _get_spendable_utxos(transaction: sqlite3.Connection, accounts: List, decode
         AND txo.amount >= ? AND txo.amount < ?
     """
     if accounts:
+        accounts_fmt = ",".join(["?"] * len(accounts))
         txo_query += f"""
-            AND account_address.account {'= ?' if len(accounts_fmt) == 1 else 'IN (' + accounts_fmt + ')'}
+            AND account_address.account {'= ?' if len(accounts_fmt) == 1 else f'IN ({accounts_fmt})'}
         """
     txo_query += """
         ORDER BY txo.amount ASC, tx.height DESC
@@ -814,8 +806,7 @@ class Database(SQLiteMixin):
         txos = []
         for (raw, height, verified), positions in to_spend.items():
             tx = Transaction(raw, height=height, is_verified=verified)
-            for nout in positions:
-                txos.append(tx.outputs[nout].get_estimator(ledger))
+            txos.extend(tx.outputs[nout].get_estimator(ledger) for nout in positions)
         return txos
 
     async def select_transactions(self, cols, accounts=None, read_only=False, **constraints):
@@ -829,7 +820,7 @@ class Database(SQLiteMixin):
               UNION
                 SELECT txi.txid FROM txi JOIN account_address USING (address) WHERE {where}
             """
-            constraints.update(values)
+            constraints |= values
         return await self.db.execute_fetchall(
             *query(f"SELECT {cols} FROM tx", **constraints), read_only=read_only
         )
@@ -857,42 +848,44 @@ class Database(SQLiteMixin):
                 raw=row['raw'], height=row['height'], position=row['position'],
                 is_verified=bool(row['is_verified'])
             ))
-            for txi in txs[-1].inputs:
-                txi_txoids.append(txi.txo_ref.id)
-
+            txi_txoids.extend(txi.txo_ref.id for txi in txs[-1].inputs)
         step = self.MAX_QUERY_VARIABLES
         annotated_txos = {}
         for offset in range(0, len(txids), step):
-            annotated_txos.update({
-                txo.id: txo for txo in
-                (await self.get_txos(
-                    wallet=wallet,
-                    txid__in=txids[offset:offset+step], order_by='txo.txid',
-                    include_is_spent=include_is_spent,
-                    include_is_my_input=include_is_my_input,
-                    include_is_my_output=include_is_my_output,
-                ))
-            })
+            annotated_txos |= {
+                txo.id: txo
+                for txo in (
+                    await self.get_txos(
+                        wallet=wallet,
+                        txid__in=txids[offset : offset + step],
+                        order_by='txo.txid',
+                        include_is_spent=include_is_spent,
+                        include_is_my_input=include_is_my_input,
+                        include_is_my_output=include_is_my_output,
+                    )
+                )
+            }
 
         referenced_txos = {}
         for offset in range(0, len(txi_txoids), step):
-            referenced_txos.update({
-                txo.id: txo for txo in
-                (await self.get_txos(
-                    wallet=wallet,
-                    txoid__in=txi_txoids[offset:offset+step], order_by='txo.txoid',
-                    include_is_my_output=include_is_my_output,
-                ))
-            })
+            referenced_txos |= {
+                txo.id: txo
+                for txo in (
+                    await self.get_txos(
+                        wallet=wallet,
+                        txoid__in=txi_txoids[offset : offset + step],
+                        order_by='txo.txoid',
+                        include_is_my_output=include_is_my_output,
+                    )
+                )
+            }
 
         for tx in txs:
             for txi in tx.inputs:
-                txo = referenced_txos.get(txi.txo_ref.id)
-                if txo:
+                if txo := referenced_txos.get(txi.txo_ref.id):
                     txi.txo_ref = txo.ref
             for txo in tx.outputs:
-                _txo = annotated_txos.get(txo.id)
-                if _txo:
+                if _txo := annotated_txos.get(txo.id):
                     txo.update_annotations(_txo)
                 else:
                     txo.update_annotations(self.TXO_NOT_MINE)
@@ -923,15 +916,15 @@ class Database(SQLiteMixin):
             include_is_spent=False, include_is_my_input=False,
             is_spent=None, read_only=False, **constraints):
         for rename_col in ('txid', 'txoid'):
-            for rename_constraint in (rename_col, rename_col+'__in', rename_col+'__not_in'):
+            for rename_constraint in (rename_col, f'{rename_col}__in', f'{rename_col}__not_in'):
                 if rename_constraint in constraints:
-                    constraints['txo.'+rename_constraint] = constraints.pop(rename_constraint)
+                    constraints[f'txo.{rename_constraint}'] = constraints.pop(rename_constraint)
         if accounts:
             account_in_sql, values = constraints_to_sql({
                 '$$account__in': [a.public_key.address for a in accounts]
             })
             my_addresses = f"SELECT address FROM account_address WHERE {account_in_sql}"
-            constraints.update(values)
+            constraints |= values
             if is_my_input_or_output:
                 include_is_my_input = True
                 constraints['received_or_sent__or'] = {
@@ -995,7 +988,7 @@ class Database(SQLiteMixin):
         my_accounts_sql = ""
         if include_is_my_output or include_is_my_input:
             my_accounts_sql, values = constraints_to_sql({'$$account__in#_wallet': my_accounts})
-            constraints.update(values)
+            constraints |= values
 
         if include_is_my_output and my_accounts:
             if constraints.get('is_my_output', None) in (True, False):
@@ -1059,10 +1052,11 @@ class Database(SQLiteMixin):
             if include_is_my_output:
                 txo.is_my_output = bool(row['is_my_output'])
             if include_is_my_input and include_is_my_output:
-                if txo.is_my_input and txo.is_my_output and row['txo_type'] == TXO_TYPES['other']:
-                    txo.is_internal_transfer = True
-                else:
-                    txo.is_internal_transfer = False
+                txo.is_internal_transfer = bool(
+                    txo.is_my_input
+                    and txo.is_my_output
+                    and row['txo_type'] == TXO_TYPES['other']
+                )
             if include_received_tips:
                 txo.received_tips = row['received_tips']
             txos.append(txo)
@@ -1284,8 +1278,7 @@ class Database(SQLiteMixin):
     def constrain_claims(constraints):
         if {'txo_type', 'txo_type__in'}.intersection(constraints):
             return
-        claim_types = constraints.pop('claim_type', None)
-        if claim_types:
+        if claim_types := constraints.pop('claim_type', None):
             constrain_single_or_list(
                 constraints, 'txo_type', claim_types, lambda x: TXO_TYPES[x]
             )

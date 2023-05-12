@@ -166,10 +166,7 @@ async def paginate_rows(get_records: Callable, get_record_count: Optional[Callab
                         page: Optional[int], page_size: Optional[int], **constraints):
     page = max(1, page or 1)
     page_size = max(1, page_size or DEFAULT_PAGE_SIZE)
-    constraints.update({
-        "offset": page_size * (page - 1),
-        "limit": page_size
-    })
+    constraints |= {"offset": page_size * (page - 1), "limit": page_size}
     items = await get_records(**constraints)
     result = {"items": items, "page": page, "page_size": page_size}
     if get_record_count is not None:
@@ -184,9 +181,7 @@ def paginate_list(items: List, page: Optional[int], page_size: Optional[int]):
     page_size = max(1, page_size or DEFAULT_PAGE_SIZE)
     total_items = len(items)
     offset = page_size * (page - 1)
-    subitems = []
-    if offset <= total_items:
-        subitems = items[offset:offset+page_size]
+    subitems = items[offset:offset+page_size] if offset <= total_items else []
     return {
         "items": subitems,
         "total_pages": int((total_items + (page_size - 1)) / page_size),
@@ -258,10 +253,12 @@ class JSONRPCError:
         if traceback is not None:
             result = trace_lines = traceback.split("\n")
             for i, t in enumerate(trace_lines):
-                if "--- <exception caught here> ---" in t:
-                    if len(trace_lines) > i + 1:
-                        result = [j for j in trace_lines[i + 1:] if j]
-                        break
+                if (
+                    "--- <exception caught here> ---" in t
+                    and len(trace_lines) > i + 1
+                ):
+                    result = [j for j in trace_lines[i + 1:] if j]
+                    break
         return result
 
     @classmethod
@@ -296,8 +293,8 @@ def trap(err, *to_trap):
 
 
 class JSONRPCServerType(type):
-    def __new__(mcs, name, bases, newattrs):
-        klass = type.__new__(mcs, name, bases, newattrs)
+    def __new__(cls, name, bases, newattrs):
+        klass = type.__new__(cls, name, bases, newattrs)
         klass.callable_methods = {}
         klass.deprecated_methods = {}
 
@@ -460,10 +457,9 @@ class Daemon(metaclass=JSONRPCServerType):
     @property
     def installation_id(self):
         install_id_filename = os.path.join(self.conf.data_dir, "install_id")
-        if not self._installation_id:
-            if os.path.isfile(install_id_filename):
-                with open(install_id_filename, "r") as install_id_file:
-                    self._installation_id = str(install_id_file.read()).strip()
+        if not self._installation_id and os.path.isfile(install_id_filename):
+            with open(install_id_filename, "r") as install_id_file:
+                self._installation_id = str(install_id_file.read()).strip()
         if not self._installation_id:
             self._installation_id = base58.b58encode(utils.generate_id()).decode()
             with open(install_id_filename, "w") as install_id_file:
@@ -549,9 +545,7 @@ class Daemon(metaclass=JSONRPCServerType):
 
     async def stop(self):
         if self.component_startup_task is not None:
-            if self.component_startup_task.done():
-                await self.component_manager.stop()
-            else:
+            if not self.component_startup_task.done():
                 self.component_startup_task.cancel()
                 # the wallet component might have not started
                 try:
@@ -560,7 +554,7 @@ class Daemon(metaclass=JSONRPCServerType):
                     pass
                 else:
                     await wallet_component.stop()
-                await self.component_manager.stop()
+            await self.component_manager.stop()
         log.info("stopped api components")
         await self.rpc_runner.cleanup()
         await self.streaming_runner.cleanup()
@@ -603,11 +597,11 @@ class Daemon(metaclass=JSONRPCServerType):
             ), ledger=ledger)
         headers = {}
         if self.conf.allowed_origin:
-            headers.update({
+            headers |= {
                 'Access-Control-Allow-Origin': self.conf.allowed_origin,
                 'Access-Control-Allow-Methods': self.conf.allowed_origin,
                 'Access-Control-Allow-Headers': self.conf.allowed_origin,
-            })
+            }
         return web.Response(
             text=encoded_result,
             headers=headers,
@@ -693,7 +687,7 @@ class Daemon(metaclass=JSONRPCServerType):
             # TODO: also delete EMPTY_PARAMS then
             _args, _kwargs = (), args[0]
         elif isinstance(args, list) and len(args) == 2 and \
-                isinstance(args[0], list) and isinstance(args[1], dict):
+                    isinstance(args[0], list) and isinstance(args[1], dict):
             _args, _kwargs = args
         else:
             return JSONRPCError(
@@ -706,9 +700,7 @@ class Daemon(metaclass=JSONRPCServerType):
 
         params_error, erroneous_params = self._check_params(method, _args, _kwargs)
         if params_error is not None:
-            params_error_message = '{} for {} command: {}'.format(
-                params_error, function_name, ', '.join(erroneous_params)
-            )
+            params_error_message = f"{params_error} for {function_name} command: {', '.join(erroneous_params)}"
             log.warning(params_error_message)
             return JSONRPCError(
                 JSONRPCError.CODE_INVALID_PARAMS,
@@ -757,21 +749,20 @@ class Daemon(metaclass=JSONRPCServerType):
         argspec = inspect.getfullargspec(undecorated(function))
         num_optional_params = 0 if argspec.defaults is None else len(argspec.defaults)
 
-        duplicate_params = [
+        if duplicate_params := [
             duplicate_param
-            for duplicate_param in argspec.args[1:len(args_tup) + 1]
+            for duplicate_param in argspec.args[1 : len(args_tup) + 1]
             if duplicate_param in args_dict
-        ]
-
-        if duplicate_params:
+        ]:
             return 'Duplicate parameters', duplicate_params
 
-        missing_required_params = [
+        if missing_required_params := [
             required_param
-            for required_param in argspec.args[len(args_tup) + 1:-num_optional_params]
+            for required_param in argspec.args[
+                len(args_tup) + 1 : -num_optional_params
+            ]
             if required_param not in args_dict
-        ]
-        if len(missing_required_params) > 0:
+        ]:
             return 'Missing required parameters', missing_required_params
 
         extraneous_params = [] if argspec.varkw is not None else [
@@ -779,7 +770,7 @@ class Daemon(metaclass=JSONRPCServerType):
             for extra_param in args_dict
             if extra_param not in argspec.args[1:]
         ]
-        if len(extraneous_params) > 0:
+        if extraneous_params:
             return 'Extraneous parameters', extraneous_params
 
         return None, None
@@ -797,11 +788,7 @@ class Daemon(metaclass=JSONRPCServerType):
         """
 
         resolved = await self.resolve([], uri)
-        if resolved:
-            claim_response = resolved[uri]
-        else:
-            claim_response = None
-
+        claim_response = resolved[uri] if resolved else None
         if claim_response and 'claim' in claim_response:
             if 'value' in claim_response['claim'] and claim_response['claim']['value'] is not None:
                 claim_value = Claim.from_bytes(claim_response['claim']['value'])
@@ -1346,9 +1333,7 @@ class Daemon(metaclass=JSONRPCServerType):
 
         """
         wallet = self.wallet_manager.get_wallet_or_default(wallet_id)
-        if password is None:
-            return wallet.to_json()
-        return wallet.pack(password).decode()
+        return wallet.to_json() if password is None else wallet.pack(password).decode()
 
     @requires("wallet")
     async def jsonrpc_wallet_import(self, data, password=None, wallet_id=None, blocking=False):
@@ -2037,9 +2022,7 @@ class Daemon(metaclass=JSONRPCServerType):
         wallet = self.wallet_manager.get_wallet_or_default(wallet_id)
         account = wallet.get_account_or_default(account_id)
         match = await self.ledger.db.get_address(read_only=True, address=address, accounts=[account])
-        if match is not None:
-            return True
-        return False
+        return match is not None
 
     @requires(WALLET_COMPONENT)
     def jsonrpc_address_list(self, address=None, account_id=None, wallet_id=None, page=None, page_size=None):
@@ -2197,16 +2180,16 @@ class Daemon(metaclass=JSONRPCServerType):
             if not hasattr(stream, 'bt_infohash') and 'dht' not in self.conf.components_to_skip:
                 stream.downloader.node = self.dht_node
             await stream.save_file()
-            msg = "Resumed download"
+            return "Resumed download"
         elif status == 'stop' and stream.running:
             await stream.stop()
-            msg = "Stopped download"
+            return "Stopped download"
         else:
-            msg = (
-                "File was already being downloaded" if status == 'start'
+            return (
+                "File was already being downloaded"
+                if status == 'start'
                 else "File was already stopped"
             )
-        return msg
 
     @requires(FILE_MANAGER_COMPONENT)
     async def jsonrpc_file_delete(self, delete_from_download_dir=False, delete_all=False, **kwargs):
@@ -2465,7 +2448,7 @@ class Daemon(metaclass=JSONRPCServerType):
         Returns: {Paginated[Dict]}
         """
         page_num, page_size = abs(kwargs.pop('page', 1)), min(abs(kwargs.pop('page_size', DEFAULT_PAGE_SIZE)), 50)
-        kwargs.update({'offset': page_size * (page_num - 1), 'limit': page_size})
+        kwargs |= {'offset': page_size * (page_num - 1), 'limit': page_size}
         support_sums = await self.ledger.sum_supports(
             new_sdk_server, claim_id=claim_id, include_channel_content=include_channel_content, **kwargs
         )
@@ -2641,7 +2624,7 @@ class Daemon(metaclass=JSONRPCServerType):
             kwargs['order_by'] = new_value
         page_num, page_size = abs(kwargs.pop('page', 1)), min(abs(kwargs.pop('page_size', DEFAULT_PAGE_SIZE)), 50)
         wallet = self.wallet_manager.get_wallet_or_default(kwargs.pop('wallet_id', None))
-        kwargs.update({'offset': page_size * (page_num - 1), 'limit': page_size})
+        kwargs |= {'offset': page_size * (page_num - 1), 'limit': page_size}
         txos, blocked, _, total = await self.ledger.claim_search(wallet.accounts, **kwargs)
         result = {
             "items": txos,
@@ -2750,13 +2733,12 @@ class Daemon(metaclass=JSONRPCServerType):
         claim_address = await self.get_receiving_address(claim_address, account)
 
         existing_channels = await self.ledger.get_channels(accounts=wallet.accounts, claim_name=name)
-        if len(existing_channels) > 0:
-            if not allow_duplicate_name:
-                # TODO: use error from lbry.error
-                raise Exception(
-                    f"You already have a channel under the name '{name}'. "
-                    f"Use --allow-duplicate-name flag to override."
-                )
+        if len(existing_channels) > 0 and not allow_duplicate_name:
+            # TODO: use error from lbry.error
+            raise Exception(
+                f"You already have a channel under the name '{name}'. "
+                f"Use --allow-duplicate-name flag to override."
+            )
 
         claim = Claim()
         claim.channel.update(**kwargs)
@@ -3141,29 +3123,21 @@ class Daemon(metaclass=JSONRPCServerType):
             holding_address = channels[0].get_address(self.ledger)
 
         account = await self.ledger.get_account_for_address(wallet, holding_address)
-        if account:
-            # Case 1: channel holding address is in one of the accounts we already have
-            #         simply add the certificate to existing account
-            pass
-        else:
-            # Case 2: channel holding address hasn't changed and thus is in the bundled read-only account
-            #         create a single-address holding account to manage the channel
-            if holding_address == data['holding_address']:
-                account = Account.from_dict(self.ledger, wallet, {
-                    'name': f"Holding Account For Channel {data['name']}",
-                    'public_key': data['holding_public_key'],
-                    'address_generator': {'name': 'single-address'}
-                })
-                if self.ledger.network.is_connected:
-                    await self.ledger.subscribe_account(account)
-                    await self.ledger._update_tasks.done.wait()
-            # Case 3: the holding address has changed and we can't create or find an account for it
-            else:
+        if not account:
+            if holding_address != data['holding_address']:
                 # TODO: use error from lbry.error
                 raise Exception(
                     "Channel owning account has changed since the channel was exported and "
                     "it is not an account to which you have access."
                 )
+            account = Account.from_dict(self.ledger, wallet, {
+                'name': f"Holding Account For Channel {data['name']}",
+                'public_key': data['holding_public_key'],
+                'address_generator': {'name': 'single-address'}
+            })
+            if self.ledger.network.is_connected:
+                await self.ledger.subscribe_account(account)
+                await self.ledger._update_tasks.done.wait()
         account.add_channel_private_key(channel_private_key)
         wallet.save()
         return f"Added channel signing key for {data['name']}."
@@ -3346,13 +3320,12 @@ class Daemon(metaclass=JSONRPCServerType):
         amount = self.get_dewies_or_error('bid', bid, positive_value=True)
         claim_address = await self.get_receiving_address(claim_address, account)
         claims = await account.get_claims(claim_name=name)
-        if len(claims) > 0:
-            if not allow_duplicate_name:
-                # TODO: use error from lbry.error
-                raise Exception(
-                    f"You already have a stream claim published under the name '{name}'. "
-                    f"Use --allow-duplicate-name flag to override."
-                )
+        if len(claims) > 0 and not allow_duplicate_name:
+            # TODO: use error from lbry.error
+            raise Exception(
+                f"You already have a stream claim published under the name '{name}'. "
+                f"Use --allow-duplicate-name flag to override."
+            )
         if not VALID_FULL_CLAIM_ID.fullmatch(claim_id):
             # TODO: use error from lbry.error
             raise Exception('Invalid claim id. It is expected to be a 40 characters long hexadecimal string.')
@@ -3363,9 +3336,9 @@ class Daemon(metaclass=JSONRPCServerType):
         tx = await Transaction.claim_create(
             name, claim, amount, claim_address, funding_accounts, funding_accounts[0], channel
         )
-        new_txo = tx.outputs[0]
-
         if channel:
+            new_txo = tx.outputs[0]
+
             new_txo.sign(channel)
         await tx.sign(funding_accounts)
 
@@ -3497,13 +3470,12 @@ class Daemon(metaclass=JSONRPCServerType):
         kwargs['fee_address'] = self.get_fee_address(kwargs, claim_address)
 
         claims = await account.get_claims(claim_name=name)
-        if len(claims) > 0:
-            if not allow_duplicate_name:
-                # TODO: use error from lbry.error
-                raise Exception(
-                    f"You already have a stream claim published under the name '{name}'. "
-                    f"Use --allow-duplicate-name flag to override."
-                )
+        if len(claims) > 0 and not allow_duplicate_name:
+            # TODO: use error from lbry.error
+            raise Exception(
+                f"You already have a stream claim published under the name '{name}'. "
+                f"Use --allow-duplicate-name flag to override."
+            )
 
         if file_path is not None:
             file_path, spec = await self._video_file_analyzer.verify_or_repair(
@@ -3991,22 +3963,21 @@ class Daemon(metaclass=JSONRPCServerType):
         claim_address = await self.get_receiving_address(claim_address, account)
 
         existing_collections = await self.ledger.get_collections(accounts=wallet.accounts, claim_name=name)
-        if len(existing_collections) > 0:
-            if not allow_duplicate_name:
-                # TODO: use error from lbry.error
-                raise Exception(
-                    f"You already have a collection under the name '{name}'. "
-                    f"Use --allow-duplicate-name flag to override."
-                )
+        if len(existing_collections) > 0 and not allow_duplicate_name:
+            # TODO: use error from lbry.error
+            raise Exception(
+                f"You already have a collection under the name '{name}'. "
+                f"Use --allow-duplicate-name flag to override."
+            )
 
         claim = Claim()
         claim.collection.update(claims=claims, **kwargs)
         tx = await Transaction.claim_create(
             name, claim, amount, claim_address, funding_accounts, funding_accounts[0], channel
         )
-        new_txo = tx.outputs[0]
-
         if channel:
+            new_txo = tx.outputs[0]
+
             new_txo.sign(channel)
         await tx.sign(funding_accounts)
 
@@ -4151,18 +4122,14 @@ class Daemon(metaclass=JSONRPCServerType):
         elif old_txo.claim.is_signed and not clear_channel and not replace:
             channel = old_txo.channel
 
-        if replace:
-            claim = Claim()
-            claim.collection.update(**kwargs)
-        else:
-            claim = Claim.from_bytes(old_txo.claim.to_bytes())
-            claim.collection.update(**kwargs)
+        claim = Claim() if replace else Claim.from_bytes(old_txo.claim.to_bytes())
+        claim.collection.update(**kwargs)
         tx = await Transaction.claim_update(
             old_txo, claim, amount, claim_address, funding_accounts, funding_accounts[0], channel
         )
-        new_txo = tx.outputs[0]
-
         if channel:
+            new_txo = tx.outputs[0]
+
             new_txo.sign(channel)
         await tx.sign(funding_accounts)
 
@@ -4445,11 +4412,7 @@ class Daemon(metaclass=JSONRPCServerType):
             # TODO: use error from lbry.error
             raise Exception('No supports found for the specified claim_id or txid:nout')
 
-        if keep is not None:
-            keep = self.get_dewies_or_error('keep', keep)
-        else:
-            keep = 0
-
+        keep = self.get_dewies_or_error('keep', keep) if keep is not None else 0
         outputs = []
         if keep > 0:
             outputs = [
@@ -4739,9 +4702,7 @@ class Daemon(metaclass=JSONRPCServerType):
         if not preview:
             for tx in txs:
                 await self.broadcast_or_release(tx, blocking)
-        if include_full_tx:
-            return txs
-        return [{'txid': tx.id} for tx in txs]
+        return txs if include_full_tx else [{'txid': tx.id} for tx in txs]
 
     @requires(WALLET_COMPONENT)
     def jsonrpc_txo_sum(self, account_id=None, wallet_id=None, **kwargs):
@@ -4931,7 +4892,7 @@ class Daemon(metaclass=JSONRPCServerType):
         elif isinstance(blob, BlobBuffer):
             log.warning("manually downloaded blob buffer could have missed garbage collection, clearing it")
             blob.delete()
-        return "Downloaded blob %s" % blob_hash
+        return f"Downloaded blob {blob_hash}"
 
     @requires(BLOB_COMPONENT, DATABASE_COMPONENT)
     async def jsonrpc_blob_delete(self, blob_hash):
@@ -4949,12 +4910,11 @@ class Daemon(metaclass=JSONRPCServerType):
         """
         if not blob_hash or not is_valid_blobhash(blob_hash):
             return f"Invalid blob hash to delete '{blob_hash}'"
-        streams = self.file_manager.get_filtered(sd_hash=blob_hash)
-        if streams:
+        if streams := self.file_manager.get_filtered(sd_hash=blob_hash):
             await self.file_manager.delete(streams[0])
         else:
             await self.blob_manager.delete_blobs([blob_hash])
-        return "Deleted %s" % blob_hash
+        return f"Deleted {blob_hash}"
 
     PEER_DOC = """
     DHT / Blob Exchange peer commands.
@@ -5074,17 +5034,14 @@ class Daemon(metaclass=JSONRPCServerType):
                 stream_hash = await self.storage.get_stream_hash_for_sd_hash(sd_hash)
             elif stream_hash:
                 sd_hash = await self.storage.get_sd_blob_hash_for_stream(stream_hash)
-            elif sd_hash:
+            else:
                 stream_hash = await self.storage.get_stream_hash_for_sd_hash(sd_hash)
                 sd_hash = await self.storage.get_sd_blob_hash_for_stream(stream_hash)
-            if sd_hash:
-                blobs = [sd_hash]
-            else:
-                blobs = []
-            if stream_hash:
-                blobs.extend([b.blob_hash for b in (await self.storage.get_blobs_for_stream(stream_hash))[:-1]])
+            blobs = [sd_hash] if sd_hash else []
         else:
             blobs = list(self.blob_manager.completed_blob_hashes)
+        if stream_hash:
+            blobs.extend([b.blob_hash for b in (await self.storage.get_blobs_for_stream(stream_hash))[:-1]])
         if needed:
             blobs = [blob_hash for blob_hash in blobs if not self.blob_manager.is_blob_verified(blob_hash)]
         if finished:
@@ -5494,7 +5451,6 @@ def loggly_time_string(date):
 
 
 def get_loggly_query_string(installation_id):
-    base_loggly_search_url = "https://lbry.loggly.com/search#"
     now = utils.now()
     yesterday = now - utils.timedelta(days=1)
     params = {
@@ -5503,4 +5459,4 @@ def get_loggly_query_string(installation_id):
         'to': loggly_time_string(now)
     }
     data = urlencode(params)
-    return base_loggly_search_url + data
+    return f"https://lbry.loggly.com/search#{data}"

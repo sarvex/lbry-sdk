@@ -514,9 +514,7 @@ class CommandTestCase(IntegrationTestCase):
 
     @staticmethod
     def get_all_addresses(tx):
-        addresses = set()
-        for txi in tx['inputs']:
-            addresses.add(txi['address'])
+        addresses = {txi['address'] for txi in tx['inputs']}
         for txo in tx['outputs']:
             addresses.add(txo['address'])
         return list(addresses)
@@ -547,9 +545,7 @@ class CommandTestCase(IntegrationTestCase):
             await self.ledger.wait(tx)
             await self.generate(1)
             await self.ledger.wait(tx, self.blockchain.block_expected)
-        if not return_tx:
-            return self.sout(tx)
-        return tx
+        return self.sout(tx) if not return_tx else tx
 
     async def create_nondeterministic_channel(self, name, price, pubkey_bytes, daemon=None, blocking=False):
         account = (daemon or self.daemon).wallet_manager.default_account

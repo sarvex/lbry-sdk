@@ -100,10 +100,10 @@ class WalletManager:
 
     @staticmethod
     def get_balance(wallet):
-        accounts = wallet.accounts
-        if not accounts:
+        if accounts := wallet.accounts:
+            return accounts[0].ledger.db.get_balance(wallet=wallet, accounts=accounts)
+        else:
             return 0
-        return accounts[0].ledger.db.get_balance(wallet=wallet, accounts=accounts)
 
     @property
     def ledger(self) -> Ledger:

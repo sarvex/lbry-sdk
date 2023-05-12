@@ -56,10 +56,7 @@ CJK_INTERVALS = [
 
 def is_cjk(c):
     n = ord(c)
-    for start, end, _ in CJK_INTERVALS:
-        if start <= n <= end:
-            return True
-    return False
+    return any(start <= n <= end for start, end, _ in CJK_INTERVALS)
 
 
 def normalize_text(seed):
@@ -69,18 +66,25 @@ def normalize_text(seed):
     seed = ''.join([c for c in seed if not unicodedata.combining(c)])
     # normalize whitespaces
     seed = ' '.join(seed.split())
-    # remove whitespaces between CJK
-    seed = ''.join([
-        seed[i] for i in range(len(seed))
-        if not (seed[i] in string.whitespace and is_cjk(seed[i-1]) and is_cjk(seed[i+1]))
-    ])
-    return seed
+    return ''.join(
+        [
+            seed[i]
+            for i in range(len(seed))
+            if not (
+                seed[i] in string.whitespace
+                and is_cjk(seed[i - 1])
+                and is_cjk(seed[i + 1])
+            )
+        ]
+    )
 
 
 def load_words(language_name):
     if language_name == 'english':
         return english.words
-    language_module = importlib.import_module('lbry.wallet.client.words.'+language_name)
+    language_module = importlib.import_module(
+        f'lbry.wallet.client.words.{language_name}'
+    )
     return list(map(
         lambda s: unicodedata.normalize('NFKD', s),
         language_module.words

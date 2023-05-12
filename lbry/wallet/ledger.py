@@ -40,16 +40,16 @@ class LedgerRegistry(type):
 
     def __new__(mcs, name, bases, attrs):
         cls: LedgerType = super().__new__(mcs, name, bases, attrs)
-        if not (name == 'BaseLedger' and not bases):
+        if name != 'BaseLedger' or bases:
             ledger_id = cls.get_id()
             assert ledger_id not in mcs.ledgers, \
-                f'Ledger with id "{ledger_id}" already registered.'
+                    f'Ledger with id "{ledger_id}" already registered.'
             mcs.ledgers[ledger_id] = cls
         return cls
 
     @classmethod
-    def get_ledger_class(mcs, ledger_id: str) -> LedgerType:
-        return mcs.ledgers[ledger_id]
+    def get_ledger_class(cls, ledger_id: str) -> LedgerType:
+        return cls.ledgers[ledger_id]
 
 
 class TransactionEvent(NamedTuple):
@@ -171,17 +171,17 @@ class Ledger(metaclass=LedgerRegistry):
 
     @classmethod
     def get_id(cls):
-        return '{}_{}'.format(cls.symbol.lower(), cls.network_name.lower())
+        return f'{cls.symbol.lower()}_{cls.network_name.lower()}'
 
     @classmethod
     def hash160_to_address(cls, h160):
         raw_address = cls.pubkey_address_prefix + h160
-        return Base58.encode(bytearray(raw_address + double_sha256(raw_address)[0:4]))
+        return Base58.encode(bytearray(raw_address + double_sha256(raw_address)[:4]))
 
     @classmethod
     def hash160_to_script_address(cls, h160):
         raw_address = cls.script_address_prefix + h160
-        return Base58.encode(bytearray(raw_address + double_sha256(raw_address)[0:4]))
+        return Base58.encode(bytearray(raw_address + double_sha256(raw_address)[:4]))
 
     @staticmethod
     def address_to_hash160(address):
@@ -242,8 +242,7 @@ class Ledger(metaclass=LedgerRegistry):
         estimators = []
         for account in funding_accounts:
             utxos = await account.get_utxos(no_tx=True, no_channel_info=True)
-            for utxo in utxos:
-                estimators.append(utxo.get_estimator(self))
+            estimators.extend(utxo.get_estimator(self) for utxo in utxos)
         return estimators
 
     async def get_addresses(self, **constraints):
@@ -309,9 +308,10 @@ class Ledger(metaclass=LedgerRegistry):
             address_details = await self.db.get_address(address=address)
             history = (address_details['history'] if address_details else '') or ''
         parts = history.split(':')[:-1]
-        return (
-            hexlify(sha256(history.encode())).decode() if history else None,
-            list(zip(parts[0::2], map(int, parts[1::2])))
+        return hexlify(
+            sha256(history.encode())
+        ).decode() if history else None, list(
+            zip(parts[::2], map(int, parts[1::2]))
         )
 
     @staticmethod
@@ -442,11 +442,7 @@ class Ledger(metaclass=LedgerRegistry):
 
             if rewound >= 100:
                 raise IndexError(
-                    "Blockchain reorganization dropped {} headers. This is highly unusual. "
-                    "Will not continue to attempt reorganizing. Please, delete the ledger "
-                    "synchronization directory inside your wallet directory (folder: '{}') and "
-                    "restart the program to synchronize from scratch."
-                    .format(rewound, self.get_id())
+                    f"Blockchain reorganization dropped {rewound} headers. This is highly unusual. Will not continue to attempt reorganizing. Please, delete the ledger synchronization directory inside your wallet directory (folder: '{self.get_id()}') and restart the program to synchronize from scratch."
                 )
 
             headers = None  # ready to download some more headers
@@ -521,8 +517,7 @@ class Ledger(metaclass=LedgerRegistry):
             remote_history = list(map(itemgetter('tx_hash', 'height'), remote_history))
             we_need = set(remote_history) - set(local_history)
             if not we_need:
-                remote_missing = set(local_history) - set(remote_history)
-                if remote_missing:
+                if remote_missing := set(local_history) - set(remote_history):
                     log.warning(
                         "%i transactions we have for %s are not in the remote address history",
                         len(remote_missing), address
@@ -562,7 +557,7 @@ class Ledger(metaclass=LedgerRegistry):
             log.info("Sync finished for address %s: %d/%d", address, len(pending_synced_history), len(to_request))
 
             assert len(pending_synced_history) == len(remote_history), \
-                f"{len(pending_synced_history)} vs {len(remote_history)} for {address}"
+                    f"{len(pending_synced_history)} vs {len(remote_history)} for {address}"
             synced_history = ""
             for remote_i, i in zip(range(len(remote_history)), sorted(pending_synced_history.keys())):
                 assert i == remote_i, f"{i} vs {remote_i}"
@@ -579,7 +574,7 @@ class Ledger(metaclass=LedgerRegistry):
                 await address_manager.ensure_address_gap()
 
             local_status, local_history = \
-                await self.get_local_status_and_history(address, synced_history)
+                    await self.get_local_status_and_history(address, synced_history)
 
             if local_status != remote_status:
                 if local_history == remote_history:
@@ -637,12 +632,11 @@ class Ledger(metaclass=LedgerRegistry):
         for txid, height in sorted(to_request, key=lambda x: x[1]):
             if cached:
                 cached_tx = self._tx_cache.get(txid)
-                if cached_tx is not None:
-                    if cached_tx.tx is not None and cached_tx.tx.is_verified:
-                        cache_hits.add(txid)
-                        continue
-                else:
+                if cached_tx is None:
                     self._tx_cache[txid] = TransactionCacheItem()
+                elif cached_tx.tx is not None and cached_tx.tx.is_verified:
+                    cache_hits.add(txid)
+                    continue
             remote_heights[txid] = height
             if len(batches[-1]) == 100:
                 batches.append([])
@@ -717,10 +711,14 @@ class Ledger(metaclass=LedgerRegistry):
 
     async def get_address_manager_for_address(self, address) -> Optional[AddressManager]:
         details = await self.db.get_address(address=address)
-        for account in self.accounts:
-            if account.id == details['account']:
-                return account.address_managers[details['chain']]
-        return None
+        return next(
+            (
+                account.address_managers[details['chain']]
+                for account in self.accounts
+                if account.id == details['account']
+            ),
+            None,
+        )
 
     async def broadcast_or_release(self, tx, blocking=False):
         try:
@@ -737,12 +735,11 @@ class Ledger(metaclass=LedgerRegistry):
 
     async def wait(self, tx: Transaction, height=-1, timeout=1):
         timeout = timeout or 600  # after 10 minutes there is almost 0 hope
-        addresses = set()
-        for txi in tx.inputs:
-            if txi.txo_ref.txo is not None:
-                addresses.add(
-                    self.hash160_to_address(txi.txo_ref.txo.pubkey_hash)
-                )
+        addresses = {
+            self.hash160_to_address(txi.txo_ref.txo.pubkey_hash)
+            for txi in tx.inputs
+            if txi.txo_ref.txo is not None
+        }
         for txo in tx.outputs:
             if txo.is_pubkey_hash:
                 addresses.add(self.hash160_to_address(txo.pubkey_hash))
@@ -771,7 +768,7 @@ class Ledger(metaclass=LedgerRegistry):
             ))[1] if record['history'] else []
             for txid, local_height in local_history:
                 if txid == tx.id:
-                    if local_height >= height or (local_height == 0 and height > local_height):
+                    if local_height >= height or local_height == 0:
                         return True
                     log.warning(
                         "local history has higher height than remote for %s (%i vs %i)", txid,
@@ -819,11 +816,11 @@ class Ledger(metaclass=LedgerRegistry):
         if accounts and any(includes):
             receipts = {}
             if include_purchase_receipt:
-                priced_claims = []
-                for txo in txos:
-                    if isinstance(txo, Output) and txo.has_price:
-                        priced_claims.append(txo)
-                if priced_claims:
+                if priced_claims := [
+                    txo
+                    for txo in txos
+                    if isinstance(txo, Output) and txo.has_price
+                ]:
                     receipts = {
                         txo.purchased_claim_id: txo for txo in
                         await self.db.get_purchases(
@@ -840,10 +837,7 @@ class Ledger(metaclass=LedgerRegistry):
                             claim_id=txo.claim_id, txo_type__in=CLAIM_TYPES, is_my_output=True,
                             is_spent=False, accounts=accounts
                         )
-                        if mine:
-                            txo.is_my_output = True
-                        else:
-                            txo.is_my_output = False
+                        txo.is_my_output = bool(mine)
                     if include_sent_supports:
                         supports = await self.db.get_txo_sum(
                             claim_id=txo.claim_id, txo_type=TXO_TYPES['support'],
@@ -883,9 +877,14 @@ class Ledger(metaclass=LedgerRegistry):
         result = {}
         for url, txo in zip(urls, txos):
             if txo:
-                if isinstance(txo, Output) and URL.parse(url).has_stream_in_channel:
-                    if not txo.channel or not txo.is_signed_by(txo.channel, self):
-                        txo = {'error': {'name': INVALID, 'text': f'{url} has invalid channel signature'}}
+                if (
+                    isinstance(txo, Output)
+                    and URL.parse(url).has_stream_in_channel
+                    and (
+                        not txo.channel or not txo.is_signed_by(txo.channel, self)
+                    )
+                ):
+                    txo = {'error': {'name': INVALID, 'text': f'{url} has invalid channel signature'}}
             else:
                 txo = {'error': {'name': NOT_FOUND, 'text': f'{url} did not resolve to a claim'}}
             result[url] = txo
@@ -917,8 +916,7 @@ class Ledger(metaclass=LedgerRegistry):
             include_purchase_receipt=include_purchase_receipt,
             include_is_my_output=include_is_my_output,
         )
-        txos = inflated[0]
-        if txos:
+        if txos := inflated[0]:
             return txos[0]
 
     async def _report_state(self):

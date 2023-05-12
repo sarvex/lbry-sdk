@@ -72,10 +72,9 @@ class StreamController:
                 tasks.append(maybe_coroutine)
         if tasks:
             return asyncio.ensure_future(asyncio.wait(tasks))
-        else:
-            f = asyncio.get_event_loop().create_future()
-            f.set_result(None)
-            return f
+        f = asyncio.get_event_loop().create_future()
+        f.set_result(None)
+        return f
 
     def add(self, event):
         skip = self._merge_repeated and event == self._last_event

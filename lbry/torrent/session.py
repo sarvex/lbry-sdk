@@ -218,7 +218,7 @@ def _create_fake_torrent(tmpdir):
     # beware, that's just for testing
     path = os.path.join(tmpdir, 'tmp')
     with open(path, 'wb') as myfile:
-        size = myfile.write(bytes([random.randint(0, 255) for _ in range(40)]) * 1024)
+        size = myfile.write(bytes(random.randint(0, 255) for _ in range(40)) * 1024)
     file_storage = libtorrent.file_storage()
     file_storage.add_file('tmp', size)
     t = libtorrent.create_torrent(file_storage, 0, 4 * 1024 * 1024)
